@@ -1,7 +1,7 @@
 ---
 title: "Creating a Custom Board Package for Mixly"
 sidebarTitle: "Custom Boards"
-description: "Learn how to structure, configure, and register a custom board package in Mixly, from boards.json entry and config.json fields to blocks, generators, and toolbox XML."
+description: "Structure, configure, and register a custom board package in Mixly — covering boards.json fields, config.json options, blocks, generators, and toolbox XML."
 ---
 
 Every board in Mixly — from the Arduino AVR family to MicroPython ESP32 variants — is delivered as a self-contained **board package**: a directory of JavaScript modules, a Blockly toolbox definition, board configuration, and optional media assets. This page walks through exactly how a board package is laid out, what each configuration field does, and how to register your own board so it appears in the IDE's board selector.
@@ -16,8 +16,10 @@ boards/default/<board_name>/
 ├── index.xml           # Compiled Blockly toolbox (categories + block entries)
 ├── main.bundle.js      # Webpack-compiled blocks + generators bundle
 ├── media/              # Board images (referenced by boards.json)
+├── images/             # Additional board images
 ├── examples/           # Sample .mix project files
-└── styles/             # Optional CSS injected into the workspace
+├── styles/             # CSS injected into the workspace
+└── wiki/               # Optional built-in documentation pages
 ```
 
 The source tree (`boards/default_src/<board_name>/`) adds the pre-build inputs:
@@ -26,11 +28,14 @@ The source tree (`boards/default_src/<board_name>/`) adds the pre-build inputs:
 boards/default_src/<board_name>/
 ├── package.json        # npm package (build scripts, name, version)
 ├── webpack.prod.js     # Webpack production config
+├── webpack.dev.js      # Webpack development config
+├── webpack.common.js   # Shared Webpack config
 ├── template.xml        # EJS template that becomes index.xml after build
 ├── export.js           # Re-exports all block + generator modules
 ├── index.js            # Entry point — registers everything with Blockly
 ├── blocks/             # Block definition files (one per category)
 ├── generators/         # Code generator files (one per category)
+├── css/                # Source CSS files (compiled into styles/ on build)
 ├── pins/               # Pin profile definitions (Profile.default)
 └── media/              # Source images
 ```
@@ -198,7 +203,7 @@ The `web` object provides overrides specific to the web (browser) runtime, inclu
   <Step title="Create the source directory">
     Copy an existing board from `boards/default_src/` that uses the same language runtime as your target (e.g., copy `arduino_avr` for a new AVR-compatible board or `micropython_esp32s2` for a MicroPython board).
 
-    ```
+    ```bash
     cp -r boards/default_src/arduino_avr boards/default_src/my_custom_board
     ```
   </Step>
@@ -228,7 +233,7 @@ The `web` object provides overrides specific to the web (browser) runtime, inclu
   </Step>
 
   <Step title="Register blocks in index.js">
-    In `index.js`, import all block and generator modules and assign them to `Blockly.Blocks` and `Blockly.Arduino.forBlock` (or the appropriate generator namespace for your language). This is the entry point Webpack compiles into `main.bundle.js`.
+    In `index.js`, import all block and generator modules then spread them into `Blockly.Blocks` and `Blockly.Arduino.forBlock` (or the appropriate generator namespace for your language) using `Object.assign`. This is the entry point Webpack compiles into `main.bundle.js`.
   </Step>
 
   <Step title="Define the toolbox in template.xml">

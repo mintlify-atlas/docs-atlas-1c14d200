@@ -1,7 +1,7 @@
 ---
-title: "Programming Arduino Boards with Mixly IDE"
+title: "Programming Arduino Boards Visually with Mixly IDE"
 sidebarTitle: "Arduino"
-description: "Build Arduino sketches visually using drag-and-drop blocks for AVR, ESP32, and ESP8266 boards, then compile and upload with arduino-cli directly from Mixly."
+description: "Build Arduino sketches visually with drag-and-drop blocks for AVR, ESP32, and ESP8266 boards, then compile and upload using arduino-cli from Mixly."
 ---
 
 Mixly turns Arduino development into a drag-and-drop experience. You assemble a program by connecting blocks, Mixly's code generator translates them into valid C/C++ in real time, and a bundled `arduino-cli` handles compilation and upload — no separate IDE required. This guide covers every step from board selection through the first blink, and explains the full block library available for each Arduino family.
@@ -92,9 +92,9 @@ void setup() {
 }
 
 void loop() {
-  digitalWrite(13, HIGH);
+  digitalWrite(13,HIGH);
   delay(1000);
-  digitalWrite(13, LOW);
+  digitalWrite(13,LOW);
   delay(1000);
 }
 ```

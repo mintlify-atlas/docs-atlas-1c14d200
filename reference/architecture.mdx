@@ -1,7 +1,7 @@
 ---
-title: "Mixly Software Architecture and Component Model"
+title: "Mixly IDE Software Architecture and Component Model"
 sidebarTitle: "Architecture"
-description: "A deep dive into Mixly's process model, component hierarchy, environment detection system, and IPC communication between the Electron main process and renderer."
+description: "Deep dive into Mixly's process model, component hierarchy, environment detection, and IPC communication between the Electron main process and renderer."
 ---
 
 Mixly is structured as a layered application that runs identically in two runtimes — a desktop Electron app and a Chromium browser — with the same renderer-side JavaScript. Understanding how the processes, components, and environment-switching mechanisms fit together is essential before writing any module-level code or extending the IDE.
@@ -39,7 +39,11 @@ function createWindow(filePath = null, indexUrl = null) {
 }
 
 app.on('ready', () => {
-    createWindow(process.argv[1] ?? null);
+    if (process.argv.length >= 2) {
+        createWindow(process.argv[1]);
+    } else {
+        createWindow(null);
+    }
 });
 ```
 
@@ -72,10 +76,10 @@ App
 ├── Nav
 ├── Workspace
 │   ├── EditorsManager       (tabbed editor area)
-│   │   ├── EditorMix        (.mix / .mil — Blockly + code preview)
+│   │   ├── EditorMix        (.mix / .mil — Blockly canvas + code preview)
+│   │   │   └── EditorBlockly  (Blockly canvas, embedded inside EditorMix)
 │   │   ├── EditorCode       (.txt, .ino, .json — Monaco/Ace)
 │   │   ├── EditorMd         (.md — Markdown preview with Monaco)
-│   │   ├── EditorBlockly    (standalone Blockly canvas)
 │   │   ├── EditorUnknown    (unsupported file type placeholder)
 │   │   └── EditorWelcome    (welcome screen)
 │   ├── StatusBarsManager    (bottom panel, tabbed)

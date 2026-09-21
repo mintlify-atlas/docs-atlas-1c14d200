@@ -1,7 +1,7 @@
 ---
-title: "Customising Mixly's Theme and Language Settings"
+title: "Mixly Theme, Language, and Workspace Display Settings"
 sidebarTitle: "Themes & Language"
-description: "How to switch between light, dark, and system-follow themes, change the UI language, pick a block renderer, and toggle workspace display options in Mixly."
+description: "Switch between light and dark themes, change the UI language, pick a block renderer, and toggle workspace display options in Mixly IDE."
 ---
 
 Mixly stores all personalisation preferences in the browser's LocalStorage under the key `mixly2.0/user`. Every time the IDE starts, `Config.init()` reads this stored object and merges it into `Config.USER`, applying theme, language, renderer, and workspace options before any UI is painted. Changes take effect immediately for theme and most workspace options — language changes trigger a page reload.

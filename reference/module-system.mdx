@@ -1,5 +1,5 @@
 ---
-title: "Mixly Custom Module Loading System Explained"
+title: "Mixly Module System: goog.loadJs and Dependency Loading"
 sidebarTitle: "Module System"
 description: "How Mixly's goog.loadJs module system works: namespace registration, dependency resolution, environment splitting, and the deps.json manifest format."
 ---
@@ -168,7 +168,7 @@ class App extends Component {
 }
 ```
 
-In Electron/NW.js environments, `goog.get` uses `fs.readFileSync`. In browser environments it falls back to a synchronous `$.get` (jQuery AJAX with `$.ajaxSettings.async = false`). Results are cached in `goog.files` to avoid repeated requests.
+In NW.js desktop environments, `goog.get` uses `fs.readFileSync` to read files synchronously from the local filesystem. In Electron and browser environments it falls back to a synchronous `$.get` (jQuery AJAX with `$.ajaxSettings.async = false`). Results are cached in `goog.files` to avoid repeated requests.
 
 ```js
 // common/main.js — goog.get implementation
@@ -176,11 +176,11 @@ goog.get = (inPath) => {
     if (goog.files[inPath]) {
         return goog.files[inPath];     // cache hit
     }
-    // Electron / NW.js path
+    // NW.js desktop path
     if (typeof nw === 'object') {
         str = fs.readFileSync(inPath, 'utf-8');
     } else {
-        // Browser path — synchronous XHR via jQuery
+        // Electron and browser path — synchronous XHR via jQuery
         $.ajaxSettings.async = false;
         $.get(inPath, (data) => { str = data; }, 'text');
         $.ajaxSettings.async = true;
@@ -227,6 +227,11 @@ Each entry has three fields:
         "path",
         "Mixly.XML",
         "Mixly.Env",
+        "Mixly.Msg",
+        "Mixly.Drag",
+        "Mixly.DragH",
+        "Mixly.DragV",
+        "Mixly.HTMLTemplate",
         "Mixly.EditorsManager",
         "Mixly.StatusBarsManager",
         "Mixly.LeftSideBarsManager",

@@ -1,7 +1,7 @@
 ---
 title: "Defining Blockly Blocks for Mixly Board Packages"
 sidebarTitle: "Block Definitions"
-description: "A developer reference for the block definition API used across Mixly board packages, with real examples from the Arduino AVR source covering inputs, dropdowns, and color conventions."
+description: "Block definition API reference for Mixly board packages, with verbatim Arduino AVR examples covering dropdowns, value inputs, and statement slot patterns."
 ---
 
 Block definitions tell Blockly what a block looks like: its shape, color, input slots, dropdown fields, connection type, and tooltip. In Mixly, every board package defines its blocks as named ES module exports in the `blocks/` directory of the board source. The compiled output is merged into `Blockly.Blocks` at startup by `index.js`. This page describes the exact patterns used throughout the Mixly codebase, with real examples taken directly from the Arduino AVR package.
@@ -25,6 +25,9 @@ Inside a block file, each export follows this shape:
 
 ```javascript
 import * as Blockly from 'blockly/core';
+import { Profile } from 'mixly';
+
+const BASE_HUE = 20;
 
 export const my_block_name = {
     init: function () {
@@ -40,13 +43,7 @@ The export name (`my_block_name`) becomes the block's type string used everywher
 Blocks are colored using a numeric hue (0–360 on the HSV wheel) passed to `this.setColour()`. In Mixly board packages, the hue is defined as a module-level constant so all blocks in a category share the same color. From `blocks/inout.js` in the Arduino AVR package:
 
 ```javascript
-const BASE_HUE = 20; // warm orange-red for I/O blocks
-```
-
-The control blocks in the same package use:
-
-```javascript
-const LOOPS_HUE = 120; // green for control/loop blocks
+const BASE_HUE = 20;//'#ae3838';//40;
 ```
 
 You can also pass a CSS hex string like `'#ae3838'` directly to `setColour()`, but the numeric hue is the convention used throughout the project.
@@ -68,7 +65,7 @@ Statement blocks (no return value) set both `setPreviousStatement` and `setNextS
 | Method | Purpose |
 |---|---|
 | `appendDummyInput(name)` | A row with no pluggable connector — used for labels and dropdowns |
-| `appendValueInput(name, type)` | An input slot that accepts a value-returning block |
+| `appendValueInput(name)` | An input slot that accepts a value-returning block; use `.setCheck(type)` to constrain the type |
 | `appendStatementInput(name)` | An input slot that accepts a stack of statement blocks |
 
 Each returns the input object so you can chain `.appendField(...)` and `.setCheck(...)` calls.
@@ -82,17 +79,15 @@ This is the simplest possible value block. It has no inputs, just a dropdown tha
 ```javascript
 // boards/default_src/arduino_avr/blocks/inout.js
 import * as Blockly from 'blockly/core';
+import { Profile } from 'mixly';
 
-const BASE_HUE = 20;
+const BASE_HUE = 20;//'#ae3838';//40;
 
 export const inout_highlow = {
     init: function () {
         this.setColour(BASE_HUE);
         this.appendDummyInput("")
-            .appendField(new Blockly.FieldDropdown([
-                [Blockly.Msg.MIXLY_HIGH, "HIGH"],
-                [Blockly.Msg.MIXLY_LOW,  "LOW"]
-            ]), 'BOOL');
+            .appendField(new Blockly.FieldDropdown([[Blockly.Msg.MIXLY_HIGH, "HIGH"], [Blockly.Msg.MIXLY_LOW, "LOW"]]), 'BOOL')
         this.setOutput(true, Boolean);
         this.setTooltip(Blockly.Msg.MIXLY_TOOLTIP_INOUT_HIGHLOW);
     }
@@ -142,7 +137,7 @@ Key points:
 
 ### Example 3 — `OneButton_interrupt` (statement block with statement input)
 
-A more complex block that includes a nested statement slot (`appendStatementInput`) — used for blocks that contain a body of code to execute on a hardware interrupt.
+A more complex block that includes a nested statement slot (`appendStatementInput`) — used for blocks that contain a body of code to execute on a button event.
 
 ```javascript
 export const OneButton_interrupt = {
@@ -152,14 +147,7 @@ export const OneButton_interrupt = {
             .appendField(Blockly.Msg.ONEBUTTON + " " + Blockly.Msg.MIXLY_PIN)
             .setCheck(Number);
         this.appendDummyInput("")
-            .appendField(Blockly.Msg.MIXLY_MODE)
-            .appendField(new Blockly.FieldDropdown([
-                [Blockly.Msg.MIXLY_CLICK,             "attachClick"],
-                [Blockly.Msg.MIXLY_DOUBLE_CLICK,      "attachDoubleClick"],
-                [Blockly.Msg.MIXLY_LONG_PRESS_START,  "attachLongPressStart"],
-                [Blockly.Msg.MIXLY_DURING_LONG_PRESS, "attachDuringLongPress"],
-                [Blockly.Msg.MIXLY_LONG_PRESS_END,    "attachLongPressStop"]
-            ]), "mode");
+            .appendField(new Blockly.FieldDropdown([[Blockly.Msg.MIXLY_CLICK, "attachClick"], [Blockly.Msg.MIXLY_DOUBLE_CLICK, "attachDoubleClick"], [Blockly.Msg.MIXLY_LONG_PRESS_START, "attachLongPressStart"], [Blockly.Msg.MIXLY_DURING_LONG_PRESS, "attachDuringLongPress"], [Blockly.Msg.MIXLY_LONG_PRESS_END, "attachLongPressStop"]]), "mode");
         this.appendValueInput("STAT")
             .appendField(Blockly.Msg.MIXLY_ELECLEVEL);
         this.appendStatementInput('DO')
@@ -178,8 +166,9 @@ export const OneButton_interrupt = {
 
 Key points:
 - `appendStatementInput('DO')` creates a C-shaped mouth that accepts a stack of statement blocks. The name `'DO'` is used in the generator to extract the nested code via `generator.statementToCode(block, 'DO')`.
+- The `appendDummyInput("")` row holds only the mode dropdown — no additional label field precedes the dropdown in this block.
 - Multiple `appendField` calls on a single input chain fields left-to-right on the same row.
-- Combining `appendDummyInput` (for the mode dropdown) with `appendValueInput` (for the electrical level) lets you mix label rows and pluggable slots on one block.
+- `appendValueInput("STAT")` with no `.setCheck()` call accepts any value-returning block in that slot.
 
 ## Inline vs. external inputs
 
@@ -196,7 +185,7 @@ this.appendValueInput("FROM")
     .appendField(Blockly.Msg.LANG_CONTROLS_FOR_INPUT_FROM);
 ```
 
-This is used in the `controls_for` block in `blocks/control.js`.
+This pattern is used in the `controls_for` block in `blocks/control.js`.
 
 ## Metadata fields
 
@@ -208,11 +197,11 @@ Mixly adds two non-standard properties to block objects that the IDE consumes at
 ```javascript
 this.wiki = {
     'zh-hans': {
-        page: ['Arduino AVR', '输入输出', '数字输出'],
-        scrollPos: '数字输出'
+        page: ['Arduino AVR', '输入输出', '硬件中断'],
+        scrollPos: '硬件中断'
     }
 };
-this.setHelpUrl("https://mixly.readthedocs.io/zh_CN/latest/arduino/02.Input-Output.html#id2");
+this.setHelpUrl("https://mixly.readthedocs.io/zh_CN/latest/arduino/02.Input-Output.html#id25");
 ```
 
 <Note>

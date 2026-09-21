@@ -1,7 +1,7 @@
 ---
-title: "Mixly npm Build Scripts and Commands Reference"
+title: "Mixly npm Build Scripts and Commands Reference Guide"
 sidebarTitle: "Build Scripts"
-description: "Complete reference for every npm script in Mixly's package.json — board bundle compilation, dependency graph generation, example maps, and board publishing."
+description: "Reference for every npm script in Mixly's package.json: board bundle compilation, dependency graph generation, example map building, and board publishing."
 ---
 
 Mixly's build pipeline is driven by a small set of Node.js scripts invoked through npm. These scripts handle everything from generating the Google Closure dependency graph used by the module loader, to running Webpack to compile individual board packages into production JS bundles, to scanning example directories and producing the `map.json` index files the IDE consumes at runtime. All scripts live under `scripts/` in the repository root and are wired up in `package.json`.
@@ -73,16 +73,16 @@ The `build-boards.js` script iterates over `boards/default_src/`, filters by boa
 
 ### `--type` flag
 
-The script accepts a `-t` / `--type` option that matches the first segment of each board directory name (the part before the first underscore):
+The script accepts a `-t` / `--type` option. The valid choices are:
 
-| `--type` value | Directories built |
+| `--type` value | What is built |
 |---|---|
-| `all` | All directories under `boards/default_src/` |
-| `arduino` | `arduino`, `arduino_avr`, `arduino_esp32`, `arduino_esp8266` |
-| `micropython` | `micropython`, `micropython_esp32`, `micropython_esp32c2`, `micropython_esp32c3`, `micropython_esp32s2`, `micropython_esp32s3`, `micropython_k210_mixgoai`, `micropython_nrf51822_microbit`, `micropython_nrf51822_mithoncc`, `micropython_robot` |
-| `python` | `python`, `python_mixpy`, `python_skulpt`, `python_skulpt_car`, `python_skulpt_mixtoy` |
+| `all` | Every directory under `boards/default_src/` (no filtering) |
+| `arduino` | Directories whose name starts with `arduino` |
+| `micropython` | Directories whose name starts with `micropython` |
+| `python` | Directories whose name starts with `python` |
 
-A board directory is skipped if it does not contain a `package.json` file. For every matching directory the script shell-changes into that directory and invokes `npm run build:prod`.
+Filtering works by splitting each directory name on `_` and comparing the first segment against the type. For example, a directory named `arduino_avr` matches `--type arduino` because its first segment is `arduino`. A board directory is skipped if it does not contain a `package.json` file. For every matching directory the script shell-changes into that directory and invokes `npm run build:prod`.
 
 <CodeGroup>
 ```bash npm

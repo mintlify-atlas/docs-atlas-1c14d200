@@ -1,7 +1,7 @@
 ---
-title: "Mixly Editor Modes: Block, Mix, and Code Views"
+title: "Mixly Editors: Block Mode, Mix Mode, and Code Mode"
 sidebarTitle: "Editors"
-description: "How EditorMix combines a full Blockly visual editor and a Monaco text editor into three switchable modes, and which Blockly plugins and custom fields are available."
+description: "How EditorMix combines a Blockly canvas and Monaco text editor into three switchable views, and which Blockly plugins and custom fields are registered."
 ---
 
 The primary editor in Mixly is `EditorMix` — a composite component that houses both a Blockly visual editor (`EditorBlockly`) and a Monaco-based text editor (`EditorCode`) inside a single resizable split-pane. Three labelled buttons at the top of the editor — **Block**, **Mix**, and **Code** — control how the split pane is displayed. Switching between them is instantaneous; no data is lost because both editors share the same underlying workspace state.
@@ -155,13 +155,13 @@ The following custom Blockly field types are registered and available to all boa
 
 The code language is inferred from the active board's `language` field in `boards.json`:
 
-| Board language | File extension | Monaco language | Tab size |
-|---|---|---|:---:|
-| `MicroPython` / `Python` / `CircuitPython` | `.py` | Python | 4 |
-| `C/C++` | `.cpp` | C/C++ | 2 |
-| `JavaScript` | `.js` | JavaScript | 4 |
-| `Lua` | `.lua` | Lua | 4 |
-| `Markdown` | `.md` | Markdown | 2 |
+| Board language | Monaco language | Tab size |
+|---|---|:---:|
+| `MicroPython` / `Python` | Python | 4 |
+| `C/C++` | C/C++ | 2 |
+| `JavaScript` | JavaScript | 4 |
+| `Lua` | Lua | 4 |
+| `Markdown` | Markdown | 2 |
 
 ### Footer Bar Integration
 

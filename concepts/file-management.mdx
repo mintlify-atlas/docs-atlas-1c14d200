@@ -60,15 +60,13 @@ In the Electron app you can associate `.mix` files with Mixly at the OS level. D
 
 <Steps>
   <Step title="Save (first time)">
-    If no file path is associated with the current editor tab (`File.openedFilePath` is `null`), calling **Save** automatically falls through to **Save As**.
+    If no file path is associated with the current editor tab, calling **Save** automatically falls through to **Save As**.
   </Step>
   <Step title="Save As">
     Opens the native OS save dialog (Electron) or the File System Access `showSaveFilePicker()` (browser). The dialog is pre-filtered by the board's supported export types — `.mix` is always available; boards may additionally offer `.py`, `.ino`, `.hex`, `.bin`, or `.mil`.
-    
-    The saved filename and directory are stored in `File.openedFilePath` and `File.workingPath` so subsequent saves go to the same location without re-prompting.
   </Step>
   <Step title="Subsequent saves">
-    Once a path is known, **Save** writes the current `editor.getValue()` output directly to disk (Electron: `fs-extra.outputFile`; browser: `FileSystemWritableFileStream`) and shows a brief toast notification.
+    Once a path is known, **Save** writes the current `editor.getValue()` output directly to disk and shows a brief toast notification. In Electron this uses `fs-extra.outputFile`; in the browser it uses `FileSystemWritableFileStream`.
   </Step>
 </Steps>
 
@@ -81,9 +79,12 @@ In the Electron app you can associate `.mix` files with Mixly at the OS level. D
 getValue() {
     const mix = blockPage.getMix();          // { block: xmlString, code: generatedCode }
     const $xml = $(mix.block);
-    $xml.attr('version', SOFTWARE.version)
-        .attr('board', boardType + '@' + boardName)
-        .attr('shown', this.drag.shown !== 'code' ? 'block' : 'code');
+    const config = Boards.getSelectedBoardConfig();
+    const boardName = Boards.getSelectedBoardName();
+    const board = BOARD?.boardType ?? 'default';
+    $xml.attr('version', SOFTWARE?.version ?? 'Mixly 2.0')
+        .attr('board', board + '@' + boardName)
+        .attr('shown', this.drag.shown !== Drag.Extend.NEGATIVE ? 'block' : 'code');
     let xml = $xml[0].outerHTML;
     if (config) xml += `<config>${MJSON.stringify(config)}</config>`;
     xml += `<code>${Base64.encode(code)}</code>`;
@@ -107,7 +108,7 @@ Tab title: "project.mix - 未保存" ← dirty (unsaved changes)
 ```
 
 <Warning>
-If you close a tab with unsaved changes, those changes are lost. There is no autosave or recovery file. Save frequently using `Ctrl+S` (or `Cmd+S` on macOS).
+If you close a tab with unsaved changes, those changes are lost. There is no autosave or recovery file. Save frequently using `Ctrl+Shift+S` (Save As) or the **File → Save** menu item.
 </Warning>
 
 ---
@@ -128,13 +129,9 @@ The screenshot option is only available when there is at least one block on the 
 
 | Action | Shortcut |
 |---|:---:|
-| New file (in current window) | `Ctrl+N` / `Cmd+N` |
+| New file | `Ctrl+N` / `Cmd+N` |
 | Save As | `Ctrl+Shift+S` / `Cmd+Shift+S` |
 | Open changelog / help | `Ctrl+H` / `Cmd+H` |
-
-<Note>
-A dedicated **Save** shortcut (`Ctrl+S`) is referenced in the status-bar context menu source but is handled by the active editor's context menu rather than as a global Electron shortcut. Use the **File → Save** navbar menu item or the `Ctrl+Shift+S` Save As shortcut to save from the keyboard.
-</Note>
 
 ### Window Management (Electron only)
 

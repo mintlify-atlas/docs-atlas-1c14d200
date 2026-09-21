@@ -1,7 +1,7 @@
 ---
 title: "Mixly Board System: Types, Languages, and Environments"
 sidebarTitle: "Boards"
-description: "How boards.json defines each target platform, what the electron/web/webCompiler/webSocket environment flags mean, and how the board selector drives toolbox filtering."
+description: "How boards.json defines each target platform, what the four environment flags mean, and how the board selector populates toolbox categories in Mixly."
 ---
 
 Every board in Mixly is described by a single JSON entry in `boards.json`. That entry tells the IDE which toolbox XML to load, which programming language to use, what the board looks like, and which deployment environments are supported. The `Mixly.Boards` module reads this configuration at startup, populates the board selector dropdown, and re-configures the toolbox and generator every time the user switches boards.
@@ -59,7 +59,7 @@ The following boards are defined in `boards.json`:
 | Python ESP32-C2 | `Python ESP32-C2` | MicroPython | ✓ | ✓ | ✓ | ✓ |
 | MixGo AI | `MixGo AI` | MicroPython | ✓ | ✓ | ✓ | ✓ |
 
-All MicroPython boards use the `micropython_*` board packages under `boards/default/`. Code is uploaded via `ampy` or `esptool` (Electron) or via a WebSocket connection to the device.
+Each board uses the board-specific package located under `boards/default/`. The upload method depends on the board hardware and is handled by the board's own configuration.
 
 </Accordion>
 
@@ -95,10 +95,6 @@ Arduino boards require a local `arduino-cli` binary for compiling and uploading,
 
 ```js
 // Simplified flow inside Boards.init()
-for (let name of Object.keys(Boards.dict)) {
-    const option = new Option(name, Boards.dict[name].key);
-    $boardSelector.append(option);
-}
 Nav.getMain().bind('changeBoard', (data) => {
     Boards.changeTo(data.text);
     Boards.updateCategories(data.text);
@@ -109,7 +105,7 @@ When the user selects a new board:
 
 <Steps>
   <Step title="Boards.changeTo(boardName)">
-    Updates `Config.SELECTED_BOARD` with the new board's burn, upload, and serial configuration. Resolves template strings like `{srcPath}` and `{indexPath}` into absolute paths. Calls `EditorBlockly.reloadWorkspace()` to preserve the current workspace state across the toolbox reload.
+    Calls `Boards.configMenu.changeTo(boardName)` to update the board config panel, then copies the selected board's configuration into `SELECTED_BOARD`. Updates `Profile['default']` if the board defines a profile entry. Calls `EditorBlockly.reloadWorkspace()` to preserve the current workspace state across the toolbox reload.
   </Step>
   <Step title="Boards.updateCategories(boardName)">
     Reads the board's toolbox XML (from `XML.CATEGORIES_STR[boardName]`), applies `m-show`/`m-hide` filtering for the board key, appends any third-party library categories (Electron only), appends the hidden `catSearch` category, and calls `EditorBlockly.updateToolbox()` to inject the new XML into the live Blockly instance.
@@ -123,7 +119,7 @@ When the user selects a new board:
 
 ## Toolbox Filtering with `m-show` / `m-hide`
 
-Board-specific toolbox XML can include `m-show` and `m-hide` attributes on `<category>` and `<block>` elements. `Boards.removeBlocks()` evaluates these against the active board's key to hide irrelevant blocks without needing separate XML files for every sub-variant.
+Board-specific toolbox XML can include `m-show` and `m-hide` attributes on `<category>` and `<block>` elements. `Boards.selectCategories()` evaluates these against the active board's key to hide irrelevant blocks without needing separate XML files for every sub-variant.
 
 ```xml
 <!-- Show this category only for ESP32-S3 boards -->

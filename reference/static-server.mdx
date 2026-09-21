@@ -1,7 +1,7 @@
 ---
-title: "Mixly Built-in Static Web Server for Browser Mode"
+title: "Mixly Static Web Server Setup and Configuration Guide"
 sidebarTitle: "Static Server"
-description: "How Mixly's Express-based static server works, its HTTP and HTTPS ports, SSL certificate setup, and everything needed to run the IDE in a Chromium browser."
+description: "How Mixly's Express static server works: HTTP port 7000, HTTPS port 8000, SSL certificate setup, and running the IDE in a Chromium browser with WebSerial."
 ---
 
 Mixly ships a small Express-based static file server that makes the IDE accessible in a web browser without a separate hosting solution. The server is intentionally minimal — it serves the entire repository root as a static tree over both plain HTTP and HTTPS simultaneously. HTTPS is required when you want to use hardware features in the browser, because the WebSerial API (the mechanism Mixly uses to talk to connected boards) is only available in secure contexts.

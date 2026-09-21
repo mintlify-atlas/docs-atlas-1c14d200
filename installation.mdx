@@ -1,5 +1,5 @@
 ---
-title: "Install Mixly 3.0 on Windows, macOS, and Linux"
+title: "Install Mixly 3.0: Desktop App and Web Server Setup"
 sidebarTitle: "Installation"
 description: "Download the one-click Electron updater for your platform, or run the Express static server and open Mixly in a Chromium browser with WebSerial enabled."
 ---
@@ -75,14 +75,15 @@ Mixly 3.0 can be installed in two ways. The **Electron desktop app** bundles eve
       ```bash What npm start does
       # npm start runs: npm run test
       # npm run test runs: npm run deps && npm run static
-      #   npm run deps  → node scripts/deps-gen.js   (generates module dependency files)
+      #   npm run deps   → node scripts/deps-gen.js        (generates module dependency files)
       #   npm run static → node ./static-server/server.js  (starts the Express static server)
-      # After those complete, Electron loads ./src/index.html
+      # Note: the Electron desktop app is launched separately by the one-click updater,
+      # not by the npm start script chain. Use npm run static to serve assets in web mode.
       ```
     </CodeGroup>
 
     <Warning>
-      `npm start` runs `npm run deps` (dependency file generation) and `npm run static` (the Express server) **before** Electron launches. Both must succeed or the renderer process will fail to load assets. Ensure Node.js is installed and `npm install` has been run at least once before calling `npm start`.
+      `npm start` runs `npm run test`, which chains `npm run deps` (dependency file generation) and `npm run static` (the Express static server). Both steps must succeed before assets are available. Ensure Node.js is installed and `npm install` has been run at least once. When running from source in Electron, start Electron separately after the static server is up.
     </Warning>
 
   </Tab>
@@ -150,7 +151,7 @@ Mixly 3.0 can be installed in two ways. The **Electron desktop app** bundles eve
         The Mixly board selection interface loads in the browser tab. Select a board that has `"web": true` in `boards.json` (for example, MixGo CE, Python ESP32-S3, or Python 3 Lite).
 
         <Note>
-          Boards marked `"web": false` in `boards.json` — including Arduino AVR, Arduino ESP8266, and Arduino ESP32 — are not available for direct serial upload in the browser. They can still be used if a web compiler endpoint is configured (`webCompiler: true` in `sw-config.json`).
+          Boards marked `"web": false` in `boards.json` — including Arduino AVR, Arduino ESP8266, and Arduino ESP32 — are not available for direct serial upload in the browser. They can still be used if a web compiler endpoint is configured (set `"webCompiler": {"enabled": true}` in `sw-config.json`).
         </Note>
       </Step>
     </Steps>

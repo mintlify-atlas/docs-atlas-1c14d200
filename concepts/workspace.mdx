@@ -1,7 +1,7 @@
 ---
-title: "Understanding the Mixly Workspace Layout"
+title: "Mixly Workspace: Panels, Regions, and Drag Handles"
 sidebarTitle: "Workspace"
-description: "A walkthrough of every region in the Mixly IDE — navigation bar, editing area, footer bar, and the drag handles that let you resize each panel."
+description: "A tour of every region in the Mixly IDE — the navigation bar, central editing area, footer bar, drag handles, and the component lifecycle they share."
 ---
 
 The Mixly workspace is a single-page application that arranges all of its components inside a hierarchy of resizable panels. When you open a project, the interface is divided into three horizontal regions: the top navigation bar, the central editing area, and the optional status/output bar at the bottom. Each region is managed by a dedicated class — `Mixly.Nav`, `Mixly.Workspace`, and `Mixly.FooterBar` — and the regions communicate through events rather than direct coupling.
@@ -32,7 +32,7 @@ On small screens or when the window is resized, buttons that cannot fit in the l
 
 ## Central Editing Area (`Mixly.EditorsManager`)
 
-The editing area is managed by `Mixly.EditorsManager`, which extends `PagesManager` and lives inside `Mixly.Workspace`. It provides a **tab bar** at the top (built on ChromeTabs with XScrollbar and Sortable for drag-to-reorder) and a body container below that swaps editor instances in and out as tabs change.
+The editing area is managed by `Mixly.EditorsManager`, which extends `PagesManager` and lives inside `Mixly.Workspace`. It provides a **tab bar** at the top and a body container below that swaps editor instances in and out as tabs change.
 
 ```
 ┌──────────────────────────────────────────────────────┐

@@ -1,10 +1,10 @@
 ---
-title: "Configuring Mixly via sw-config.json"
+title: "Mixly sw-config.json Software Configuration Reference"
 sidebarTitle: "Software Config"
-description: "A field-by-field reference for sw-config.json — the top-level software configuration file that controls board URLs, tool paths, server features, and debug output."
+description: "Field-by-field reference for sw-config.json — controls board URLs, tool paths, WebSocket and web compiler features, behavior recording, and debug output."
 ---
 
-The `sw-config.json` file sits at the root of the Mixly installation and is loaded once during startup by `Config.init()`. Every key you set here becomes part of `Config.SOFTWARE` at runtime and takes precedence over built-in defaults. This makes `sw-config.json` the single authoritative place to tune server-side features, override tool paths for CI environments, or enable diagnostic logging — without touching any source code.
+The `sw-config.json` file sits at the root of the Mixly installation and is loaded once during startup by `Config.init()`. Every key you set here becomes part of `Config.SOFTWARE` at runtime and takes precedence over the built-in defaults. This makes `sw-config.json` the single authoritative place to tune server-side features, override tool paths for CI environments, or enable diagnostic logging — without touching any source code.
 
 ## Default Configuration
 
@@ -49,7 +49,7 @@ The file shipped with Mixly Lite contains the following defaults. All fields are
 ### `version`
 
 <ParamField path="version" type="string" default="Mixly 3.0 rc0">
-  Human-readable release label. At startup this value is written to `document.title` in the SW (service-worker) layer so the browser tab or Electron window title reflects the running build. Set this to a custom string when deploying a branded or internally patched release.
+  Human-readable release label. At startup, `title.js` combines this value with the active board name to set `document.title` (e.g. `"Mixly 3.0 rc0 For Arduino AVR"`). Set this to a custom string when deploying a branded or internally patched release.
 </ParamField>
 
 ---
@@ -99,7 +99,7 @@ Platform-specific overrides for the tool binaries that Mixly invokes when compil
 ### `webSocket`
 
 <ParamField path="webSocket.enabled" type="boolean" default="false">
-  Enables the optional WebSocket back-end server that lets the browser-based Mixly front-end communicate with a local hardware agent for serial upload and compilation. When `true`, `Env.hasSocketServer` is set to `true` and the loader initialises the socket client. Leave `false` for pure Electron deployments or when using WebSerial exclusively.
+  Enables the optional WebSocket back-end server that lets the browser-based Mixly front-end communicate with a local hardware agent for serial upload and compilation. When `true`, `Config.init()` sets `Env.hasSocketServer = true`, activating the WebSocket code path in the loader. Leave `false` for pure Electron deployments or when using WebSerial exclusively.
 </ParamField>
 
 ---
@@ -107,7 +107,7 @@ Platform-specific overrides for the tool binaries that Mixly invokes when compil
 ### `webCompiler`
 
 <ParamField path="webCompiler.enabled" type="boolean" default="false">
-  Enables a remote or locally hosted compiler service reachable from the web front-end. When `true`, `Env.hasCompiler` is set to `true` and boards that list `"webCompiler": true` in `boards.json` can be compiled in-browser without the Electron shell. Requires a matching compiler endpoint to be running; see the server deployment guide for setup details.
+  Enables a remote or locally hosted compiler service reachable from the web front-end. When `true`, `Config.init()` sets `Env.hasCompiler = true`, and boards that list `"webCompiler": true` in `boards.json` can be compiled in-browser without the Electron shell. Requires a matching compiler endpoint to be running.
 </ParamField>
 
 ---
@@ -115,11 +115,11 @@ Platform-specific overrides for the tool binaries that Mixly invokes when compil
 ### `behaviorRecord`
 
 <ParamField path="behaviorRecord.url" type="string" default='""'>
-  Endpoint URL that receives anonymised usage events via HTTP POST. The payload is built by `UserEvents` and sent only when `behaviorRecord.enabled` is `true`. Useful for collecting aggregate telemetry on a self-hosted analytics service. Leave empty to disable reporting entirely.
+  Endpoint URL that receives usage events via HTTP POST. The payload is assembled by `UserEvents` and dispatched to this URL whenever a compile or upload action completes. Leave empty to prevent any POST requests from being sent.
 </ParamField>
 
 <ParamField path="behaviorRecord.enabled" type="boolean" default="false">
-  Master switch for usage event recording. When `false` no POST requests are made, regardless of whether `url` is set.
+  Reserved flag indicating that behavior recording is configured. Set to `true` alongside a valid `url` to signal that telemetry is intentionally active.
 </ParamField>
 
 ---
@@ -127,12 +127,7 @@ Platform-specific overrides for the tool binaries that Mixly invokes when compil
 ### `debug`
 
 <ParamField path="debug" type="boolean" default="false">
-  Global debug flag. When `true`:
-  - The `Mixly.Debug` wrapper passes calls through to native `console` methods (enabling full log levels such as `warn`, `error`, and `table` in addition to `log`).
-  - The Electron IPC event handler logs every received message to the console (`console.log('receive -> ', message)`).
-  - The WebSocket client logs all socket traffic.
-
-  Keep this `false` in production to suppress verbose output.
+  Global debug flag consumed by the `Mixly.Debug` wrapper module. When `false`, every `Debug.*()` call (e.g. `Debug.warn`, `Debug.error`) is routed through `console.log` with a bracketed type prefix such as `[WARN]` or `[ERROR]`. When `true`, each `Debug.*()` call is forwarded to its matching native `console` method — `Debug.warn` → `console.warn`, `Debug.error` → `console.error` — preserving the full browser DevTools log-level filtering. Keep this `false` in production to suppress verbose output.
 </ParamField>
 
 ---

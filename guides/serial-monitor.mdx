@@ -1,7 +1,7 @@
 ---
-title: "Using the Serial Monitor and Chart in Mixly IDE"
+title: "Using the Mixly IDE Serial Monitor and Chart Plotter"
 sidebarTitle: "Serial Monitor"
-description: "Open the serial monitor from the Mixly footer bar to read board output, send commands, view timestamps, display hex data, and plot live numeric data as a chart."
+description: "Use the Mixly status bar serial monitor to read board output, send commands, view timestamps, toggle hex display, and plot live numeric data as a chart."
 ---
 
 The Mixly serial monitor lives in the status bar at the bottom of the IDE window. Each serial port you connect to gets its own tab, so you can have multiple boards open simultaneously. Within each tab you can switch between a text output view and a real-time line chart that plots numeric data as the board sends it. The monitor works in both the Electron desktop app and the browser via the WebSerial API.
@@ -75,11 +75,10 @@ The status bar output panel supports the following keyboard shortcuts when the o
 |---|---|
 | Increase font size | `Ctrl` + `=` or `Ctrl` + `+` |
 | Decrease font size | `Ctrl` + `-` |
-| Send Ctrl+C to board | `Ctrl` + `Shift` + `C` |
-| Send Ctrl+D to board | `Ctrl` + `Shift` + `D` |
-| Clear the output | `Ctrl` + `E` |
+| Send Ctrl+C to board | `Ctrl` + `C` (when no text is selected) |
+| Send Ctrl+D to board | `Ctrl` + `D` |
 
-`Ctrl+C` sends an interrupt signal and `Ctrl+D` sends a soft reset — these are the standard MicroPython REPL control sequences. On MicroPython boards you can use these to stop a running program and enter the interactive REPL without physically pressing the reset button.
+`Ctrl+C` sends an interrupt signal when no text is selected in the output panel (if text is selected, it copies the selection instead). `Ctrl+D` sends a soft reset. These are the standard MicroPython REPL control sequences. On MicroPython boards you can use these to stop a running program and enter the interactive REPL without physically pressing the reset button.
 
 You can also right-click the output area to access the context menu, which exposes **Interrupt (Ctrl+C)**, **Reset (Ctrl+D)**, and **Toggle port** items.
 
@@ -94,7 +93,7 @@ You can also right-click the output area to access the context menu, which expos
     - Reading structured strings or JSON from the board
     - Monitoring log messages
 
-    **Clear the output** at any time by clicking the trash/empty button in the toolbar or pressing `Ctrl+E`.
+    **Clear the output** at any time by clicking the empty/trash button in the serial output toolbar.
 
     The output panel is a read-only Ace editor instance, which means you get syntax highlighting, find (`Ctrl+F`), and proper monospace rendering at any font size.
   </Tab>

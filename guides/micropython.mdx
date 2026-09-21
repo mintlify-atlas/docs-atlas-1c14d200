@@ -1,10 +1,10 @@
 ---
-title: "Programming MicroPython Boards with Mixly IDE"
+title: "Flash and Upload MicroPython Boards with Mixly IDE"
 sidebarTitle: "MicroPython"
-description: "Connect, flash firmware, and upload MicroPython programs to ESP32, K210, and micro:bit boards using Mixly's visual block editor and ampy/esptool integration."
+description: "Flash firmware and upload MicroPython programs to ESP32 and K210 boards in Mixly using ampy for file uploads and esptool or kflash for firmware flashing."
 ---
 
-Mixly supports a growing family of MicroPython boards that span from tiny ESP32-C2 modules to the K210 AI accelerator. You build your program visually with blocks, Mixly generates clean Python code, and then transfers it to the board over serial — either as a `main.py` file via ampy (for ESP32/K210 boards) or by copying to the board's mass-storage volume (for USB-MSC boards like micro:bit). For brand-new boards you also get a one-click firmware flasher powered by esptool or kflash.
+Mixly supports a growing family of MicroPython boards that span from tiny ESP32-C2 modules to the K210 AI accelerator. You build your program visually with blocks, Mixly generates clean Python code, and then transfers it to the board over serial as a `main.py` file using ampy. For brand-new boards you also get a one-click firmware flasher — powered by esptool for ESP32-family boards and kflash for the K210-based MixGo AI.
 
 ## Supported MicroPython Boards
 
