@@ -1,0 +1,212 @@
+---
+title: "Mixly Editor Modes: Block, Mix, and Code Views"
+sidebarTitle: "Editors"
+description: "How EditorMix combines a full Blockly visual editor and a Monaco text editor into three switchable modes, and which Blockly plugins and custom fields are available."
+---
+
+The primary editor in Mixly is `EditorMix` — a composite component that houses both a Blockly visual editor (`EditorBlockly`) and a Monaco-based text editor (`EditorCode`) inside a single resizable split-pane. Three labelled buttons at the top of the editor — **Block**, **Mix**, and **Code** — control how the split pane is displayed. Switching between them is instantaneous; no data is lost because both editors share the same underlying workspace state.
+
+## The Three Modes
+
+<Tabs>
+  <Tab title="Block Mode">
+    Block mode shows the Blockly canvas at full width; the code panel is hidden. This is the default view when you open a new `.mix` file.
+
+    - The left toolbox is fully visible with all block categories.
+    - The Blockly canvas occupies the entire editing area.
+    - Generated code is not visible but is computed on demand (e.g. when you save or upload).
+    - The active button is highlighted with the `self-adaption-btn` class.
+
+    Internally, `EditorMix` calls `this.drag.full(Drag.Extend.POSITIVE)` to collapse the code pane completely.
+
+    ```
+    ┌─────────────────────────────────────┐
+    │  [Block ●]  [Mix]  [Code]           │
+    ├──────────┬──────────────────────────┤
+    │ Toolbox  │   Blockly Canvas         │
+    │          │                          │
+    └──────────┴──────────────────────────┘
+    ```
+  </Tab>
+
+  <Tab title="Mix Mode">
+    Mix mode shows both panels side-by-side. The Blockly canvas occupies the left `70 %` (default) and the code preview fills the right `30 %`. The vertical split handle between them can be dragged to any position (minimum `200 px` per side).
+
+    - The code panel updates live as blocks are connected or disconnected.
+    - The code panel is **read-only** in Mix mode — it is a preview only.
+    - Right-clicking the code panel shows an **Enter Code Editor** option that switches to Code mode.
+    - Right-clicking the Blockly canvas shows an **Open Workspace Search** option.
+
+    Internally, `EditorMix` calls `this.drag.exitfull()` on both sides to restore the split.
+
+    ```
+    ┌─────────────────────────────────────┐
+    │  [Block]  [Mix ●]  [Code]           │
+    ├──────────┬──────────────┬───────────┤
+    │ Toolbox  │ Blockly      │ Code      │
+    │          │ Canvas       │ (preview) │
+    └──────────┴──────────────┴───────────┘
+    ```
+  </Tab>
+
+  <Tab title="Code Mode">
+    Code mode hides the Blockly canvas and shows the Monaco editor at full width. The editor becomes **writable** in this mode.
+
+    - You can edit the generated code directly.
+    - If the board's `pythonToBlockly` flag is enabled and the Py2block converter is loaded, switching back to Mix mode will attempt to convert the edited code back into blocks.
+    - Otherwise, returning to Mix mode re-generates the code from the current block state and discards manual edits.
+    - Right-clicking in Code mode shows Cut, Copy, Paste, Toggle Comment (`Ctrl+/`), and Toggle Block Comment (`Shift+Alt+A`).
+
+    Internally, `EditorMix` calls `this.drag.full(Drag.Extend.NEGATIVE)`.
+
+    ```
+    ┌─────────────────────────────────────┐
+    │  [Block]  [Mix]  [Code ●]           │
+    ├─────────────────────────────────────┤
+    │                                     │
+    │        Monaco Text Editor           │
+    │          (writable)                 │
+    └─────────────────────────────────────┘
+    ```
+  </Tab>
+</Tabs>
+
+<Warning>
+Edits made in Code mode are not automatically converted back to blocks unless the `pythonToBlockly` flag is set for the active board. Switching from Code back to Mix or Block will overwrite the code panel with freshly generated output from the block workspace.
+</Warning>
+
+---
+
+## EditorBlockly — The Visual Editor
+
+`EditorBlockly` is a static-singleton Blockly editor: a single `Blockly.inject()` instance is shared across all open tabs to avoid the overhead of re-initialising the Blockly SVG. When a different tab becomes active, the workspace state is serialised and restored via `Blockly.serialization.workspaces`.
+
+### Blockly Initialisation
+
+```js
+Blockly.inject(element, {
+    media: 'common/media/',
+    toolbox: DEFAULT_CATEGORIES,
+    renderer: 'geras' | 'zelos',   // user preference
+    zoom: {
+        controls: true,
+        wheel: true,
+        scaleSpeed: 1.03
+    },
+    grid: {                        // when user enables grid
+        spacing: 20,
+        length: 3,
+        colour: '#ccc',
+        snap: true
+    }
+});
+```
+
+The renderer (`geras` or `zelos`) and grid visibility are set from `Config.USER` preferences and applied at inject time.
+
+### Installed Plugins
+
+The following Blockly plugins are initialised automatically via `EditorBlockly.addPlugins()`:
+
+<CardGroup cols={2}>
+  <Card title="WorkspaceSearch" icon="magnifying-glass">
+    Adds an in-canvas search bar. Triggered via the right-click context menu (**Open Workspace Search**) or added as a menu option at runtime.
+  </Card>
+  <Card title="Backpack" icon="bag-shopping">
+    A persistent block clipboard that persists across sessions. Supports copy-to-backpack, paste-from-backpack, and copy-all / paste-all. Right-click a block to access backpack options.
+  </Card>
+  <Card title="ZoomToFitControl" icon="expand">
+    Adds a zoom-to-fit button to the canvas controls that centres and scales the view so all blocks are visible.
+  </Card>
+  <Card title="ContentHighlight" icon="highlighter">
+    When enabled (`USER.blocklyContentHighlight === 'yes'`), visually highlights the block that is currently connected to the cursor or being evaluated.
+  </Card>
+</CardGroup>
+
+The **Screenshot** plugin is also registered, adding a **Download Screenshot** entry to the Blockly right-click context menu. This is the canonical way to export a PNG of your workspace.
+
+<Tip>
+Right-click anywhere on the empty Blockly canvas (not on a block) to access **Open Workspace Search** and **Download Screenshot**. Right-click a block to access comment, duplicate, delete, and backpack options.
+</Tip>
+
+### Custom Fields
+
+The following custom Blockly field types are registered and available to all boards:
+
+| Field class | Purpose |
+|---|---|
+| `Blockly.FieldGridDropdown` | A dropdown that renders options in a grid layout instead of a list |
+| `Blockly.FieldDependentDropdown` | A dropdown whose options update based on the value of another field |
+| `Blockly.FieldSlider` | A numeric input rendered as a draggable slider |
+| `Blockly.FieldBitmap` | A pixel-grid editor for defining small bitmaps (e.g. LED matrices) |
+| `Blockly.FieldColourHsvSliders` | A colour picker using HSV hue, saturation, and value sliders |
+| `Blockly.FieldDate` | A calendar-based date picker |
+| `Blockly.FieldAngle` | An angle picker with a circular dial |
+| `Blockly.FieldColour` | Standard hex colour picker |
+| `Blockly.FieldMultilineInput` | A text field that accepts multiple lines |
+
+---
+
+## EditorCode — The Text Editor
+
+`EditorCode` extends `EditorMonaco`, which wraps the Monaco Editor (the same editor engine used in VS Code). It is used both as the code-preview pane inside `EditorMix` and as a standalone editor for `.txt`, `.ino`, and `.json` files.
+
+### Language Detection
+
+The code language is inferred from the active board's `language` field in `boards.json`:
+
+| Board language | File extension | Monaco language | Tab size |
+|---|---|---|:---:|
+| `MicroPython` / `Python` / `CircuitPython` | `.py` | Python | 4 |
+| `C/C++` | `.cpp` | C/C++ | 2 |
+| `JavaScript` | `.js` | JavaScript | 4 |
+| `Lua` | `.lua` | Lua | 4 |
+| `Markdown` | `.md` | Markdown | 2 |
+
+### Footer Bar Integration
+
+When the Monaco editor is focused, the footer bar displays the cursor position:
+- `#mixly-footer-row` — current line number
+- `#mixly-footer-column` — current column
+- `#mixly-footer-selected` — number of selected characters (hidden when nothing is selected)
+
+---
+
+## Other Editor Types
+
+`EditorsManager.typesRegistry` registers additional editor types for non-`.mix` files:
+
+<CardGroup cols={2}>
+  <Card title="EditorMd" icon="file-lines">
+    A Markdown editor for `.md` files — used for board documentation and wiki pages. Supports a split preview pane.
+  </Card>
+  <Card title="EditorWelcome" icon="house">
+    The welcome screen shown when no tabs are open. It is replaced by the editor container as soon as the first tab is created.
+  </Card>
+</CardGroup>
+
+---
+
+## Blockly Event Filtering
+
+`EditorMix` subscribes to Blockly workspace change events and uses them to trigger dirty-state tracking and live code updates. The following event types are explicitly **ignored** to avoid unnecessary re-renders:
+
+```js
+EditorMix.BLOCKLY_IGNORE_EVENTS = [
+    Blockly.Events.UI,
+    Blockly.Events.VIEWPORT_CHANGE,
+    Blockly.Events.COMMENT_CHANGE,
+    Blockly.Events.COMMENT_CREATE,
+    Blockly.Events.COMMENT_DELETE,
+    Blockly.Events.COMMENT_MOVE,
+    Blockly.Events.TRASHCAN_OPEN,
+    Blockly.Events.CLICK,
+    Blockly.Events.SELECTED,
+    Blockly.Events.THEME_CHANGE,
+    Blockly.Events.BUBBLE_OPEN,
+    Blockly.Events.TOOLBOX_ITEM_SELECT,
+    Blockly.Events.BLOCK_DRAG
+];
+```
+
+Only structural changes (block create, delete, move, field value change) mark the tab as dirty and regenerate the code preview.

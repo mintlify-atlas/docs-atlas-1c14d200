@@ -1,20 +1,66 @@
 ---
-title: "Introduction"
-description: "Welcome to your project"
+title: "Mixly: Visual Programming IDE for Hardware"
+sidebarTitle: "Home"
+description: "Mixly is a graphical programming IDE built on Blockly for Arduino, MicroPython, and Python boards. Drag blocks, generate code, and upload to hardware in minutes."
 ---
 
-Write a short description of your product here. What it does, who it's for, and what they can accomplish with it.
+Mixly is an open-source, block-based programming environment designed for beginners, educators, and hardware enthusiasts. Build programs by dragging and connecting visual blocks — Mixly automatically generates the underlying Arduino C++ or Python code and uploads it directly to your board via USB or Wi-Fi.
 
-<Tip>
-  Ready to make this your own? Start by editing this page. Update your `docs.json` file to customize your site. Then fill out the [Quickstart](/quickstart) page.
-</Tip>
+<CardGroup cols={2}>
+  <Card title="Introduction" icon="book-open" href="/introduction">
+    Learn what Mixly is, which boards it supports, and how it runs in both desktop and browser environments.
+  </Card>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Connect a board, write your first program, and upload it in under five minutes.
+  </Card>
+  <Card title="Installation" icon="download" href="/installation">
+    Install Mixly as a desktop app or run it locally as a static web server.
+  </Card>
+  <Card title="Board Guides" icon="microchip" href="/guides/arduino">
+    Step-by-step guides for Arduino, MicroPython, and Python boards.
+  </Card>
+</CardGroup>
 
-<Card title="Quickstart" icon="rocket" href="/quickstart">
-  This card links to the quickstart page in your project.
-</Card>
-<Card title="Components" icon="puzzle-piece" href="https://mintlify.com/docs/components">
-  Add cards, callouts, steps, tabs, and more to design and structure your pages.
-</Card>
-<Card title="Settings" icon="gear" href="https://mintlify.com/docs/organize/settings">
-  Set your site name, branding, and navigation in the `docs.json` file.
-</Card>
+## What you can build
+
+<CardGroup cols={3}>
+  <Card title="Arduino Projects" icon="bolt" href="/guides/arduino">
+    Program AVR, ESP32, and ESP8266 boards with drag-and-drop C++ code generation.
+  </Card>
+  <Card title="MicroPython Projects" icon="python" href="/guides/micropython">
+    Flash and upload MicroPython programs to ESP32, K210, and micro:bit boards.
+  </Card>
+  <Card title="Python Simulations" icon="desktop" href="/guides/python">
+    Run Python programs in-browser with Skulpt or on the local machine with Python 3.
+  </Card>
+  <Card title="Serial Monitor" icon="chart-line" href="/guides/serial-monitor">
+    Read serial output and plot sensor data in real time inside the IDE.
+  </Card>
+  <Card title="Library Manager" icon="box-archive" href="/guides/library-management">
+    Import third-party Mixly, Arduino, and Python libraries from cloud or local ZIP files.
+  </Card>
+  <Card title="Custom Boards" icon="puzzle-piece" href="/reference/custom-boards">
+    Create and publish your own board package with custom block categories and code generators.
+  </Card>
+</CardGroup>
+
+## How it works
+
+<Steps>
+  <Step title="Choose a board">
+    Select your hardware from the board selector in the navigation bar. Mixly loads the matching toolbox categories, pin definitions, and code generator for that board.
+  </Step>
+  <Step title="Build your program">
+    Drag blocks from the left toolbox into the workspace. Switch to the split Mix view to see the generated code update live alongside your blocks.
+  </Step>
+  <Step title="Connect via USB or serial">
+    Plug in your board. Mixly detects available serial ports automatically (desktop) or prompts you to grant WebSerial access (browser).
+  </Step>
+  <Step title="Upload or run">
+    Click the upload button. Mixly compiles (Arduino) or transfers (MicroPython/Python) your program to the board and streams the output to the serial monitor.
+  </Step>
+</Steps>
+
+<Note>
+  Mixly runs on Windows, macOS, and Linux as an Electron desktop app, and in any modern Chromium-based browser using WebSerial for hardware communication.
+</Note>

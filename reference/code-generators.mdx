@@ -1,0 +1,238 @@
+---
+title: "Writing Code Generators for Mixly Block Definitions"
+sidebarTitle: "Code Generators"
+description: "A complete reference for Mixly's code generator API — how to register generators, retrieve field values, emit setup code, inject definitions, and handle value vs. statement blocks."
+---
+
+A code generator is the function that transforms a Blockly block into a string of target-language code. In Mixly every board package ships generator files in its `generators/` directory that mirror the `blocks/` files one-to-one. At startup, `index.js` merges these into the generator's `forBlock` map. This page describes the generator API as it is actually used in the Mixly source, with real examples from the Arduino AVR `generators/inout.js` file.
+
+## Registration pattern
+
+Generator functions are exported as named exports from each file in `generators/`. The export name must exactly match the corresponding block type name defined in `blocks/`. In `index.js` they are registered by spreading into `Blockly.Arduino.forBlock`:
+
+```javascript
+// index.js (excerpt)
+import { Arduino } from '@mixly/arduino';
+import * as ArduinoAVRInoutGenerators from './generators/inout';
+
+Blockly.Arduino = Arduino;
+
+Object.assign(
+    Blockly.Arduino.forBlock,
+    ArduinoAVRInoutGenerators,
+    // ... other generator modules
+);
+```
+
+Each generator function receives two arguments: `block` (the Blockly block instance, though inside the function `this` also refers to the block) and `generator` (the generator instance, which carries all helper methods and output buffers):
+
+```javascript
+export const my_block_name = function (block, generator) {
+    // extract values and fields
+    // build and return code string
+};
+```
+
+## Retrieving values from blocks
+
+### `block.getFieldValue(fieldName)`
+
+Reads the current value of a static field (dropdown, text input, checkbox) by the name you gave it in the block definition. Returns a string.
+
+```javascript
+var dropdown_stat = this.getFieldValue('STAT'); // e.g. "HIGH" or "LOW"
+var dropdown_mode = this.getFieldValue('mode'); // e.g. "RISING"
+```
+
+### `generator.valueToCode(block, inputName, order)`
+
+Generates the code for a connected value block and returns it as a string. The third argument is an operator precedence constant that tells the generator whether to wrap the expression in parentheses. Always pass `generator.ORDER_ATOMIC` when you need the raw expression value without parentheses.
+
+```javascript
+var dropdown_pin = generator.valueToCode(this, 'PIN', generator.ORDER_ATOMIC);
+var value_num    = generator.valueToCode(this, 'NUM',  generator.ORDER_ATOMIC);
+```
+
+### `generator.statementToCode(block, inputName)`
+
+Extracts the code for all blocks connected inside a statement input slot (the body of an `appendStatementInput`). Returns a multi-line indented string.
+
+```javascript
+var branch = generator.statementToCode(this, 'DO');
+```
+
+## Returning code from a generator
+
+There are two return conventions depending on the block type:
+
+**Statement blocks** (those with `setPreviousStatement`/`setNextStatement`) return a plain code string ending with `\n`:
+
+```javascript
+return 'digitalWrite(' + pin + ', ' + stat + ');\n';
+```
+
+**Value blocks** (those with `setOutput`) return a two-element array `[codeString, order]`, where `order` is the precedence of the outermost operator in the expression:
+
+```javascript
+return [code, generator.ORDER_ATOMIC];
+```
+
+`ORDER_ATOMIC` is the highest precedence (lowest number) and means "this expression never needs parentheses when used as a sub-expression." Use `generator.ORDER_NONE` for expressions that must always be parenthesized.
+
+## Output buffers: definitions and setups
+
+The Arduino generator maintains two special output buffers that are flushed into different sections of the compiled sketch:
+
+| Buffer | Where output lands | Typical use |
+|---|---|---|
+| `generator.definitions_['key']` | Global scope (before `setup()`) | `#include` directives, global variable declarations, helper function definitions |
+| `generator.setups_['key']` | Inside `setup()` | `pinMode()` calls, peripheral initialization, library `begin()` calls |
+
+Using a string key (rather than appending to an array) means that if multiple blocks on the canvas need the same `#include` or initialization, only one copy appears in the generated sketch — the second assignment simply overwrites the first with identical content.
+
+## Real generator examples from the source
+
+### Example 1 — `inout_highlow` (value generator, dropdown to constant)
+
+The simplest possible generator: reads a dropdown field and returns its string value with `ORDER_ATOMIC`.
+
+```javascript
+// boards/default_src/arduino_avr/generators/inout.js
+export const inout_highlow = function (_, generator) {
+    var code = (this.getFieldValue('BOOL') == 'HIGH') ? 'HIGH' : 'LOW';
+    return [code, generator.ORDER_ATOMIC];
+};
+```
+
+Note that the first argument `_` is unused — `this` inside a generator function refers to the block instance, so `this.getFieldValue` works just as it does in `init`.
+
+### Example 2 — `inout_digital_write2` (statement generator with setup injection)
+
+This generator calls `valueToCode` twice, conditionally injects a `pinMode` call into `generator.setups_`, and returns a statement string.
+
+```javascript
+export const inout_digital_write2 = function (_, generator) {
+    var dropdown_pin  = generator.valueToCode(this, 'PIN',  generator.ORDER_ATOMIC);
+    var dropdown_stat = generator.valueToCode(this, 'STAT', generator.ORDER_ATOMIC);
+    var code = "";
+
+    // Determine if the pin value is a literal pin name or a variable.
+    // If it's a variable, emit pinMode inline; if it's a literal, use setups_.
+    var isVar = true;
+    for (var pin of Profile.default.digital) {
+        if (pin[0] === dropdown_pin) {
+            isVar = false;
+            break;
+        }
+    }
+
+    if (isVar) {
+        // Variable pin: emit pinMode immediately before the write
+        code = code + 'pinMode(' + dropdown_pin + ', OUTPUT);\n';
+    } else {
+        // Literal pin: remove any existing INPUT setup and add OUTPUT setup
+        if (generator.setups_['setup_input_' + dropdown_pin]) {
+            delete generator.setups_['setup_input_' + dropdown_pin];
+        }
+        generator.setups_['setup_output_' + dropdown_pin] =
+            'pinMode(' + dropdown_pin + ', OUTPUT);';
+    }
+
+    code += 'digitalWrite(' + dropdown_pin + ',' + dropdown_stat + ');\n';
+    return code;
+};
+```
+
+The key pattern here: writing to `generator.setups_['setup_output_' + dropdown_pin]` ensures that `pinMode(pin, OUTPUT)` appears exactly once in `setup()` no matter how many `digitalWrite` blocks reference the same pin.
+
+### Example 3 — `OneButton_interrupt` (definitions + setups + inline function generation)
+
+This is the most complex generator pattern used in Mixly: it injects an `#include`, declares a global object, registers a setup call, generates a named callback function definition, and returns a statement.
+
+```javascript
+export const OneButton_interrupt = function (_, generator) {
+    // Inject the library include into global scope
+    generator.definitions_['include_OneButton'] = '#include <OneButton.h>';
+
+    var dropdown_pin  = generator.valueToCode(this, 'PIN',  generator.ORDER_ATOMIC);
+    var dropdown_mode = this.getFieldValue('mode');
+    var dropdown_stat = generator.valueToCode(this, 'STAT', generator.ORDER_ATOMIC);
+
+    // Declare the OneButton object in global scope
+    generator.definitions_['var_declare_button' + dropdown_pin] =
+        'OneButton button' + dropdown_pin + '('
+        + dropdown_pin + ','
+        + ((dropdown_stat == 'HIGH') ? 'false' : 'true')
+        + ');';
+
+    // Register the event handler in setup()
+    generator.setups_['setup_onebutton_' + dropdown_pin + dropdown_mode] =
+        'button' + dropdown_pin + '.' + dropdown_mode
+        + '(' + dropdown_mode + dropdown_pin + ');';
+
+    // The loop() code: call tick() on each iteration
+    var code = 'button' + dropdown_pin + '.tick();';
+
+    // Generate the callback function and inject it as a global definition
+    var funcName = dropdown_mode + dropdown_pin;
+    var branch   = generator.statementToCode(this, 'DO');
+    var code2    = 'void ' + funcName + '() {\n' + branch + '}\n';
+    generator.definitions_[funcName] = code2;
+
+    return code;
+};
+```
+
+This pattern — `definitions_` for includes + globals + functions, `setups_` for `setup()` body lines, and a short statement returned for `loop()` — is the standard approach for any block that needs library initialization.
+
+### Example 4 — `inout_digital_read` (value generator with setup injection)
+
+Reading a digital pin: the generator injects `pinMode(pin, INPUT)` into `setup()` and returns an expression string.
+
+```javascript
+export const inout_digital_read = function (_, generator) {
+    var dropdown_pin = this.getFieldValue('PIN');
+    generator.setups_['setup_input_' + dropdown_pin] =
+        'pinMode(' + dropdown_pin + ', INPUT);';
+    var code = 'digitalRead(' + dropdown_pin + ')';
+    return [code, generator.ORDER_ATOMIC];
+};
+```
+
+Because this is a value block, the return is `[expressionString, ORDER_ATOMIC]`. The `setup_input_` prefix on the key is a convention used throughout the AVR generators so that `inout_digital_write2` can find and delete conflicting `INPUT` setups when the same pin is later set to `OUTPUT`.
+
+## Soft-PWM pattern (definitions + setups together)
+
+Some peripheral blocks need both a global include and a setup call. The `inout_soft_analog_write` generator shows the cleanest version of this:
+
+```javascript
+export const inout_soft_analog_write = function (_, generator) {
+    var dropdown_pin = generator.valueToCode(this, 'PIN', generator.ORDER_ATOMIC);
+    var value_num    = generator.valueToCode(this, 'NUM',  generator.ORDER_ATOMIC);
+    generator.definitions_['include_SoftPWM'] = '#include <SoftPWM.h>';
+    generator.setups_['setup_soft_analog_write'] = 'SoftPWMBegin();';
+    var code = 'SoftPWMSet(' + dropdown_pin + ', ' + value_num + ');\n';
+    return code;
+};
+```
+
+The library include and the `SoftPWMBegin()` setup call are both keyed with unique strings, so placing two soft-PWM blocks on the canvas still produces only one include and one `SoftPWMBegin()` call.
+
+## Order of operations constants
+
+The `generator` object exposes precedence constants that match the target language's operator binding strength. For C/C++ (Arduino) code the constants you will use most often are:
+
+| Constant | Use case |
+|---|---|
+| `generator.ORDER_ATOMIC` | Identifiers, literals, function calls — never need parentheses |
+| `generator.ORDER_NONE` | Comma expressions — always need parentheses as sub-expressions |
+
+Use `ORDER_ATOMIC` for both the `order` argument to `valueToCode` and as the second element of a value block's return array when the expression is a simple identifier or function call.
+
+<Note>
+The `definitions_` and `setups_` objects are reset at the start of each code generation pass, so you never need to clear them manually. Any definitions written during one block's generator will be available to other generators in the same pass.
+</Note>
+
+<Tip>
+When debugging a generator, temporarily add `console.log(generator.definitions_)` and `console.log(generator.setups_)` at the end of your generator function to inspect what is being injected into the global scope and setup function. Remove these before shipping.
+</Tip>

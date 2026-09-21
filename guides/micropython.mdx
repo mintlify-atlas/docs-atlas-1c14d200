@@ -1,0 +1,144 @@
+---
+title: "Programming MicroPython Boards with Mixly IDE"
+sidebarTitle: "MicroPython"
+description: "Connect, flash firmware, and upload MicroPython programs to ESP32, K210, and micro:bit boards using Mixly's visual block editor and ampy/esptool integration."
+---
+
+Mixly supports a growing family of MicroPython boards that span from tiny ESP32-C2 modules to the K210 AI accelerator. You build your program visually with blocks, Mixly generates clean Python code, and then transfers it to the board over serial — either as a `main.py` file via ampy (for ESP32/K210 boards) or by copying to the board's mass-storage volume (for USB-MSC boards like micro:bit). For brand-new boards you also get a one-click firmware flasher powered by esptool or kflash.
+
+## Supported MicroPython Boards
+
+All MicroPython boards in Mixly support both the Electron desktop app and the browser (web) mode via WebSerial.
+
+| Board Type | Key Hardware | Upload Method |
+|---|---|---|
+| **MixGo CE** | ESP32-S2 | ampy over WebSerial / Electron serial |
+| **Python ESP32-S3** | ESP32-S3 (MixGo Nova) | ampy over WebSerial / Electron serial |
+| **Python ESP32-C3** | ESP32-C3 | ampy over WebSerial / Electron serial |
+| **Python ESP32-C2** | ESP32-C2 | ampy over WebSerial / Electron serial |
+| **Python ESP32** | ESP32 | ampy over WebSerial / Electron serial |
+| **Python Robot** | ESP32 robot variant (MixBot) | ampy over WebSerial / Electron serial |
+| **MixGo AI** | Kendryte K210 | kflash / ampy over Electron serial |
+
+<Note>
+  BBC micro:bit and Mithon CC board definitions exist in the source but are commented out in the active `boards.json`. They may be enabled in a future release or installed as cloud board packages.
+</Note>
+
+<Warning>
+  **Flash MicroPython firmware before first use.** A brand-new ESP32/ESP32-S3/ESP32-C3 board ships with the manufacturer's default firmware, not MicroPython. You must flash MicroPython firmware onto the board once before Mixly can upload `.py` programs to it. See the firmware flashing section below.
+</Warning>
+
+## Connecting Your Board
+
+<Steps>
+  <Step title="Install a USB driver if needed">
+    Most ESP32 boards use a CP2102 or CH340 USB-to-serial chip. Install the appropriate driver for your operating system before connecting:
+    - **CP210x**: Silicon Labs driver
+    - **CH340/CH341**: WCH driver
+    ESP32-S2/S3/C3 boards with native USB do not need a separate driver.
+  </Step>
+  <Step title="Select the board in Mixly">
+    On the Mixly home screen, click the board card that matches your hardware (e.g., **Python ESP32**). The MicroPython toolbox and board-specific pin definitions load.
+  </Step>
+  <Step title="Connect via USB">
+    Plug in your board. A new serial port should appear in the status bar port selector at the bottom of the window.
+  </Step>
+  <Step title="Select the serial port">
+    Click the port dropdown in the status bar and choose the correct COM port (Windows) or `/dev/tty*` device (macOS/Linux). In the browser, Mixly calls `navigator.serial.requestPort()` to let you grant access to the port.
+  </Step>
+</Steps>
+
+## Flashing MicroPython Firmware
+
+For ESP32-family boards, Mixly uses **esptool** to flash a binary firmware image over serial. For K210 boards, it uses **kflash**.
+
+<Steps>
+  <Step title="Click the Burn (flash) button">
+    In the Mixly board toolbar, find the **Burn** button (flame icon). This triggers the firmware flash workflow.
+  </Step>
+  <Step title="Confirm the port and baud rate">
+    Mixly automatically selects the active serial port. esptool negotiates the connection at up to 921600 baud for speed. The Output tab in the status bar shows chip detection output, e.g.:
+    ```
+    esptool.py v4.x
+    Detecting chip type... ESP32
+    Chip is ESP32-D0WDQ6 (revision v1.0)
+    ```
+  </Step>
+  <Step title="Wait for the flash to complete">
+    Firmware is written sector by sector. A progress bar tracks the write. In the web mode, the Adafruit esptool library is used for ESP32-S2 boards and the standard ESPTool library for other variants.
+  </Step>
+  <Step title="Reset the board">
+    After flashing completes, press the reset (EN/RST) button on your board or unplug and reconnect it. The board will boot MicroPython and you should see a REPL prompt if you open the serial monitor.
+  </Step>
+</Steps>
+
+<Note>
+  The K210 MixGo AI board uses **kflash** for firmware and **ampy** for uploading `.py` files. The workflow is identical to ESP32 boards from the Mixly UI perspective.
+</Note>
+
+## Uploading a MicroPython Program
+
+After firmware is flashed, the normal day-to-day workflow is uploading your block-generated Python code as `main.py` using **ampy**.
+
+<Steps>
+  <Step title="Build your program with blocks">
+    Drag blocks from the MicroPython toolbox. Mixly generates Python code in real time in the code preview panel on the right side of the workspace.
+  </Step>
+  <Step title="Click Upload">
+    Click the **Upload** button in the toolbar. Mixly writes the generated code to a temporary file, then calls `ampy put main.py` over the selected serial port. The status bar Output tab shows:
+    ```
+    Writing main.py Done!
+    ==Upload Succeeded==
+    ```
+  </Step>
+  <Step title="Automatic serial monitor">
+    After a successful upload, the serial port tab opens automatically in the status bar, connecting to the board's REPL so you can see `print()` output from your program immediately.
+  </Step>
+</Steps>
+
+<Warning>
+  Close the serial monitor before uploading. ampy needs exclusive access to the serial port. If a serial monitor tab is open for the same port, Mixly closes it automatically before starting the upload, but if another terminal application has the port open the upload will fail.
+</Warning>
+
+## Uploading a .py File vs Flashing Firmware
+
+These are two distinct operations with different purposes:
+
+<Tabs>
+  <Tab title="Upload (.py file)">
+    **What it does:** Transfers your block-generated code as `main.py` to the board's internal filesystem using ampy's file-put command.
+
+    **When to use:** Every time you want to run a new or updated program. The board must already be running MicroPython firmware.
+
+    **Speed:** Fast — only the Python source file is transferred (typically a few KB in a second or two).
+
+    **Board state after:** The board immediately runs `main.py` on its next reset.
+  </Tab>
+  <Tab title="Burn (firmware flash)">
+    **What it does:** Erases the flash and writes a full MicroPython binary image using esptool (ESP32 family) or kflash (K210).
+
+    **When to use:** Once, when the board is new or when you need to update the MicroPython version.
+
+    **Speed:** Slow — a complete firmware image can be 1–2 MB and takes 30–90 seconds at 921600 baud.
+
+    **Board state after:** MicroPython REPL is available but the filesystem is empty; you must upload your `main.py` separately.
+  </Tab>
+</Tabs>
+
+## Typical First-Use Workflow
+
+```
+New board received
+       ↓
+  Flash firmware (Burn button + esptool)
+       ↓
+  Board boots MicroPython REPL
+       ↓
+  Build program with blocks
+       ↓
+  Upload main.py (Upload button + ampy)
+       ↓
+  Program runs, open serial monitor to see output
+       ↓
+  Edit blocks → Upload → repeat
+```

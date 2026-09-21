@@ -1,0 +1,148 @@
+---
+title: "Managing Libraries in the Mixly IDE"
+sidebarTitle: "Libraries"
+description: "Import, update, and delete Mixly block libraries, Arduino .zip libraries, and Python .py modules from cloud sources or local files using the Library Manager."
+---
+
+The Mixly Library Manager lets you extend the Blockly toolbox with new block categories and supply supporting code files to your programs — without restarting the IDE. Libraries come in three flavours that correspond to the three language targets Mixly supports. You can pull them from a cloud URL listed in the board configuration or import from a local file on disk. After any import or deletion, the toolbox updates automatically to reflect the change.
+
+## Opening the Library Manager
+
+Click the **Libraries** button in the board page toolbar (or press the keyboard shortcut shown in the toolbar tooltip). The Library Manager dialog opens with two tabs: **Import** and **Manage**.
+
+- **Import** — browse cloud libraries or import from a local file
+- **Manage** — view installed libraries and delete them
+
+## Library Types
+
+<Accordion title="Mixly Library (.xml / .mil / .zip)">
+  Mixly libraries extend the Blockly toolbox with new block categories. They are the most common type and work with all board families.
+
+  **File formats accepted:**
+
+  | Format | Structure |
+  |---|---|
+  | `.xml` | A block-category XML file inside a named directory. The directory also contains generator JavaScript files (`.js`) and optional CSS. |
+  | `.mil` | A compact single-file format. The filename becomes the category name; the file contains the block XML body. Categories appear in the toolbox with the colour `#74a55b`. |
+  | `.zip` | A zip archive containing a directory in one of the above layouts. On import the archive is extracted to the `libraries/ThirdParty/` folder inside the board package directory. |
+
+  **Where libraries are stored:** `<board-package>/libraries/ThirdParty/<library-name>/`
+
+  **Toolbox update:** After a Mixly library import or deletion, `LibManager.reloadThirdPartyLibs()` is called. This removes any previously loaded third-party JS/CSS, resets the toolbox to its default XML, and re-injects all installed libraries before calling `Boards.updateCategories()` to refresh the visible toolbox.
+
+  **Cloud URL source:** `BOARD.lib.mixly.url[0]` from the board's configuration.
+</Accordion>
+
+<Accordion title="Arduino Library (.zip)">
+  Arduino libraries contain C/C++ header and source files that are compiled alongside your sketch. They follow the standard Arduino library layout (a directory with `src/` or root-level `.h`/`.cpp` files).
+
+  **File formats accepted:** `.zip` only. The archive is extracted to `<board-package>/libraries/myLib/<library-name>/`.
+
+  **Scope:** Only available when the current board has `BOARD.nav.compile` set (i.e., Arduino AVR, ESP8266, ESP32 boards).
+
+  **Cloud URL source:** `BOARD.lib.arduino.url[0]` from the board configuration.
+
+  **Note:** Arduino libraries do not add new blocks to the toolbox. They add C/C++ dependencies that the `arduino-cli` compiler picks up during compilation. To expose new blocks backed by an Arduino library, pair it with a Mixly `.xml` or `.mil` library.
+</Accordion>
+
+<Accordion title="Python Module (.py)">
+  Python libraries are plain `.py` files that get copied to the Python lib directory and transferred to MicroPython boards alongside the main program, or made available to the local Python 3 interpreter.
+
+  **File formats accepted:** `.py` only. Files are copied to `<board-package>/build/lib/<module-name>.py`.
+
+  **Scope:** Only available when `BOARD.nav.compile` is not set (i.e., MicroPython and Python boards).
+
+  **Upload behavior (MicroPython):** When Mixly uploads `main.py` to a MicroPython board, it scans the generated code for `import` and `from ... import` statements. Any matching `.py` or `.mpy` files found in the configured `upload.libPath` directories are copied alongside `main.py` before transfer so the board has all its dependencies.
+
+  **Cloud URL source:** `BOARD.lib.python.url[0]` from the board configuration.
+</Accordion>
+
+## Importing a Library from the Cloud
+
+The cloud library list is fetched from the URL defined in the board's configuration (`BOARD.lib.mixly.url[0]` for Mixly libraries, `BOARD.lib.arduino.url[0]` for Arduino, `BOARD.lib.python.url[0]` for Python). The list is a JSON index that includes each library's name, version, description, and download URL.
+
+<Steps>
+  <Step title="Open the Library Manager">
+    Click **Libraries** in the board toolbar. The **Import** tab is shown by default.
+  </Step>
+  <Step title="Choose the library type">
+    The Import tab has two sub-tabs: **Mixly** (for `.xml`/`.mil`/`.zip` block libraries) and **Arduino** or **Python** depending on the board type. Select the tab for the library type you want.
+  </Step>
+  <Step title="Wait for the cloud list to load">
+    Mixly downloads the JSON index from the configured URL. The table populates with library names, versions, descriptions, and installation status:
+    - **Not Installed** — the library is available but not yet downloaded
+    - **Installed** — the library is present and at the latest version
+    - **Pending Upgrade** — the library is installed but a newer version exists in the cloud
+  </Step>
+  <Step title="Select one or more libraries">
+    Check the checkboxes next to the libraries you want. You can select multiple libraries for a batch download.
+  </Step>
+  <Step title="Click Cloud Import">
+    Click the **Cloud Import** button. A progress dialog opens showing a download and extraction progress bar for each selected library. Mixly downloads the `.zip` to a local `download/` temp directory, then extracts it to the appropriate target folder.
+  </Step>
+  <Step title="Toolbox updates automatically">
+    After all downloads complete, `LibManager.reloadThirdPartyLibs()` runs and the new block categories appear in the toolbox immediately. No restart required.
+  </Step>
+</Steps>
+
+## Importing a Library from a Local File
+
+<Steps>
+  <Step title="Open the Library Manager and click Local Import">
+    In the Import tab, click the **Local Import** button. A native file-picker dialog opens, filtered to the allowed extensions for the selected library type:
+    - **Mixly**: `.xml`, `.mil`, `.zip`
+    - **Arduino**: `.zip`
+    - **Python**: `.py`
+  </Step>
+  <Step title="Select your file">
+    Navigate to and select your library file. Mixly validates the file extension before proceeding. If the file already exists in the target directory, an error is shown and the import is cancelled to prevent accidental overwrites.
+  </Step>
+  <Step title="Wait for the import to complete">
+    A loading overlay appears while the file is copied or extracted. A toast notification confirms success or reports an error.
+    - `.py` files are copied to `<board>/build/lib/`
+    - `.mil` files are copied to `<board>/libraries/ThirdParty/`
+    - `.xml` files — the parent directory of the `.xml` file is copied to `<board>/libraries/ThirdParty/<dir-name>/`
+    - `.zip` files are extracted to the appropriate target (`ThirdParty/` for Mixly, `myLib/` for Arduino)
+  </Step>
+  <Step title="Toolbox updates">
+    For Mixly library types, the toolbox reloads automatically. For Arduino and Python types, the files are available for the next compile or upload.
+  </Step>
+</Steps>
+
+## Viewing and Deleting Installed Libraries
+
+<Steps>
+  <Step title="Switch to the Manage tab">
+    In the Library Manager dialog, click the **Manage** tab. Two sub-tables appear: one for installed Mixly libraries and one for installed Arduino or Python libraries.
+  </Step>
+  <Step title="Review the list">
+    Each row shows the library name and its path on disk. The list is read directly from the filesystem on every tab switch to stay current.
+  </Step>
+  <Step title="Select libraries to delete">
+    Check the rows for any libraries you want to remove.
+  </Step>
+  <Step title="Click Delete">
+    Click the **Delete** button. A progress overlay appears while the selected directories or files are removed using `fs-extra.remove()`. After deletion, the table refreshes and the Blockly toolbox reloads if any Mixly libraries were removed.
+  </Step>
+  <Step title="Open the library folder">
+    The **Open Folder** button in the Manage tab opens the relevant library directory in your system file manager (Explorer on Windows, Finder on macOS, Files on Linux), so you can inspect or manually copy files.
+  </Step>
+</Steps>
+
+## Library URL Configuration
+
+The cloud endpoints for each library type come from the board's configuration file (the `index.xml` of each board package). In the JavaScript layer they are accessed as:
+
+```javascript
+LibManager.URL = {
+    mixly:   BOARD?.lib?.mixly?.url[0],
+    arduino: BOARD?.lib?.arduino?.url[0],
+    python:  BOARD?.lib?.python?.url[0]
+}
+```
+
+If a URL is `undefined` (the board config does not define a cloud source for that library type), the corresponding cloud table shows an empty state and only local import is available for that type.
+
+<Note>
+  Version tracking for cloud-installed Mixly libraries uses a `config.json` file written to the library directory after download. This file stores the version string from the cloud index. On the next library browser open, the local version is compared to the cloud version to determine if an upgrade is available.
+</Note>

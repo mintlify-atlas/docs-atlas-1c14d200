@@ -1,0 +1,290 @@
+---
+title: "Per-Board Configuration in Mixly IDE"
+sidebarTitle: "Board Config"
+description: "How Mixly discovers, loads, and applies per-board config.json settings — covering burn, upload, nav, serial, and boards.json structure."
+---
+
+Every board package in Mixly carries its own `config.json` that tells the IDE exactly how to compile, upload, and display tooling for that target. Understanding this structure lets you customise board behaviour, add third-party boards, and control which toolbar buttons appear — without modifying shared IDE code.
+
+## How Board Config is Loaded
+
+At startup `Config.init()` reads the `config.json` from the active board's directory and merges it with any URL query parameters, producing the `Config.BOARD` object:
+
+```javascript
+Config.BOARD = {
+    ...goog.getJSON(path.join(Env.boardDirPath, 'config.json'), BOARD_DEFAULT_CONFIG),
+    ...urlConfig   // URL query params can override individual keys
+};
+```
+
+If `Config.BOARD.board` is a string ending in `.json`, it is itself loaded as a nested board-sub-type manifest from the same directory.
+
+## Default Board Config
+
+When a board's `config.json` omits a key, Mixly applies the following built-in defaults from `BOARD_DEFAULT_CONFIG`:
+
+```json
+{
+    "burn":            "None",
+    "upload":          "None",
+    "nav":             "None",
+    "serial":          "None",
+    "saveMixWithCode": true,
+    "thirdPartyBoard": false
+}
+```
+
+## Field Reference
+
+### Top-level Fields
+
+<ParamField path="burn" type="string | object" default='"None"'>
+  Describes how to flash firmware (MicroPython runtime, bootloader, etc.) onto a device — distinct from uploading user code. Set to `"None"` to hide the **Burn** toolbar button entirely.
+
+  When an object, it typically contains:
+  - `type` — `"command"` to run a shell command (Electron) or an object for WebSerial flash.
+  - `portSelect` — `"all"` to show all available serial ports.
+  - Per-board-key entries mapping a board's FQBN to a command string or binary file list.
+
+  **MicroPython ESP32 example:**
+  ```json
+  "burn": {
+      "type": "command",
+      "portSelect": "all",
+      "micropython:esp32:mixgo": {
+          "command": "\"{esptool}\" --chip esp32 --port {com} --baud 460800 erase_flash && \"{esptool}\" --port {com} --baud 460800 write_flash 0x1000 \"{indexPath}/build/MixGo-0x1000-V1.19.1.bin\""
+      }
+  }
+  ```
+</ParamField>
+
+<ParamField path="upload" type="string | object" default='"None"'>
+  Controls how user-written code (`.ino`, `.py`) is uploaded to the connected device. `"None"` disables the **Upload** button.
+
+  Common sub-keys for MicroPython targets:
+  - `type` — `"command"` invokes a CLI tool (e.g. `ampy`).
+  - `command` — shell template with `{com}`, `{indexPath}`, `{ampy}`, `{reset}` placeholders.
+  - `filePath` — destination path on the device (`main.py`).
+  - `copyLib` — `true` to copy library files before uploading user code.
+  - `libPath` — array of local paths scanned for library files.
+  - `portSelect` — `"all"` to enumerate all serial ports.
+
+  For Arduino (`arduino_avr`) the object only requires `portSelect` because `arduino-cli` handles the rest:
+  ```json
+  "upload": { "portSelect": "all" }
+  ```
+</ParamField>
+
+<ParamField path="nav" type="string | object" default='"None"'>
+  Declaratively controls which buttons appear in the top navigation bar. `"None"` uses the IDE's own defaults.
+
+  Supported keys and their effects:
+
+  | Key | Type | Effect |
+  |-----|------|--------|
+  | `compile` | `boolean` | Show **Compile** button (Arduino) |
+  | `upload` | `boolean` | Show **Upload** button |
+  | `burn` | `boolean` | Show **Burn** button (MicroPython) |
+  | `run` | `boolean` | Show **Run** button (Python 3) |
+  | `cancel` | `boolean` | Show **Cancel** button (Python 3) |
+  | `save.ino` | `boolean` | Enable **Save as .ino** option |
+  | `save.hex` | `boolean` | Enable **Save as .hex** option |
+  | `save.py` | `boolean` | Enable **Save as .py** option |
+  | `setting.thirdPartyLibrary` | `boolean` | Show **Third-party Library** menu item |
+  | `setting.wiki` | `boolean` | Show **Wiki** link in settings |
+  | `setting.pythonToBlockly` | `boolean` | Show **Python→Blockly** reverse-parse option |
+
+  **Arduino AVR example:**
+  ```json
+  "nav": {
+      "compile": true,
+      "upload": true,
+      "save": { "ino": true, "hex": true },
+      "setting": { "thirdPartyLibrary": true, "wiki": true }
+  }
+  ```
+</ParamField>
+
+<ParamField path="serial" type="string | object" default='"None"'>
+  Configures the built-in serial monitor. `"None"` disables it entirely.
+
+  | Sub-key | Type | Description |
+  |---------|------|-------------|
+  | `baudRates` | `number` | Default baud rate (e.g. `9600`, `115200`) |
+  | `ctrlCBtn` | `boolean` | Show Ctrl-C interrupt button (MicroPython REPL) |
+  | `ctrlDBtn` | `boolean` | Show Ctrl-D soft-reset button (MicroPython REPL) |
+  | `rts` | `boolean` | Assert RTS on open (hardware reset for Arduino) |
+  | `dtr` | `boolean` | Assert DTR on open |
+  | `yMax` | `number` | Y-axis upper limit for the serial plotter |
+  | `yMin` | `number` | Y-axis lower limit for the serial plotter |
+  | `pointNum` | `number` | Number of data points retained in the plotter view |
+</ParamField>
+
+<ParamField path="saveMixWithCode" type="boolean" default="true">
+  When `true`, the generated source code (Base64-encoded) is embedded inside `.mix` save files alongside the block XML. This allows reopening a `.mix` file in environments where code generation might differ. Set to `false` for boards where embedding code is undesirable (e.g. web-only `python_skulpt` variants that generate code at load time).
+</ParamField>
+
+<ParamField path="thirdPartyBoard" type="boolean" default="false">
+  Marks this board as a user-installed third-party package rather than a built-in board. Third-party boards can be managed (deleted, updated) through the Board Manager dialog; built-in boards cannot be removed.
+</ParamField>
+
+### Additional Fields
+
+<ParamField path="board" type="string | object">
+  Defines the sub-board variants available for this package. Can be:
+  - A plain string (single-board packages like `"micropython:esp32:mixgo"`).
+  - An object mapping friendly display names to FQBN strings or option arrays:
+
+  ```json
+  "board": {
+      "Arduino/Genuino Uno": { "key": "arduino:avr:uno", "config": [] },
+      "Arduino Nano": {
+          "key": "arduino:avr:nano",
+          "config": [
+              {
+                  "label": "Processor",
+                  "key": "cpu",
+                  "options": [
+                      { "key": "atmega328", "label": "ATmega328P" },
+                      { "key": "atmega328old", "label": "ATmega328P (Old Bootloader)" }
+                  ]
+              }
+          ]
+      }
+  }
+  ```
+
+  The `config` array drives the **Board Config** popup in the footer bar (see [Board Config Popup](#board-config-popup) below).
+</ParamField>
+
+<ParamField path="language" type="string">
+  Human-readable programming language label displayed in the board selector UI. Recognised values from shipped boards: `"C/C++"`, `"MicroPython"`, `"Python"`.
+</ParamField>
+
+<ParamField path="web" type="object">
+  Web-mode overrides for connection type and flash sequences. The `com` sub-key sets the WebSerial connection type (`"serial"`). The `burn` sub-key provides binary file lists and offsets for in-browser flashing via the WebSerial Flash API.
+</ParamField>
+
+<ParamField path="lib" type="object">
+  Declares remote library registries for this board. The `mixly.url` array lists JSON manifest URLs polled by the Library Manager.
+</ParamField>
+
+---
+
+## boards.json Structure
+
+The repository-level `boards.json` lists every board visible to the user in the board selector dropdown. Each entry is an object with the following fields:
+
+<ParamField path="boardImg" type="string">
+  Relative path (from the repo root) to the board's thumbnail image shown in the board selector and Board Manager dialog.
+</ParamField>
+
+<ParamField path="boardType" type="string">
+  Unique display name for the board. This string becomes the key in `Boards.dict` and is used to look up board-specific data in LocalStorage.
+</ParamField>
+
+<ParamField path="boardIndex" type="string">
+  Relative path to the board package's `index.xml`, which contains the Blockly toolbox definition for this board.
+</ParamField>
+
+<ParamField path="env" type="object">
+  Feature flags that control in which runtime contexts this board is available:
+
+  | Flag | Type | Meaning |
+  |------|------|---------|
+  | `electron` | `boolean` | Board loads in the Electron desktop app |
+  | `web` | `boolean` | Board loads in the browser (WebSerial) |
+  | `webCompiler` | `boolean` | Board can use the remote web compiler |
+  | `webSocket` | `boolean` | Board can use the WebSocket back-end agent |
+</ParamField>
+
+<ParamField path="language" type="string">
+  Programming language label for display purposes. One of `"C/C++"`, `"MicroPython"`, or `"Python"`.
+</ParamField>
+
+### boards.json Example
+
+```json boards.json (excerpt)
+[
+    {
+        "boardImg": "./boards/default/arduino_avr/media/uno_compressed.png",
+        "boardType": "Arduino AVR",
+        "boardIndex": "./boards/default/arduino_avr/index.xml",
+        "env": {
+            "electron": true,
+            "web": false,
+            "webCompiler": true,
+            "webSocket": true
+        },
+        "language": "C/C++"
+    },
+    {
+        "boardImg": "./boards/default/micropython_esp32s2/media/mixgoce_compressed.png",
+        "boardType": "MixGo CE",
+        "boardIndex": "./boards/default/micropython_esp32s2/index.xml",
+        "env": {
+            "electron": true,
+            "web": true,
+            "webCompiler": true,
+            "webSocket": true
+        },
+        "language": "MicroPython"
+    }
+]
+```
+
+<Note>
+  Boards with `"web": false` are hidden from the board selector when Mixly runs in a browser. The Electron app always shows all boards where `"electron": true`.
+</Note>
+
+---
+
+## Board Config Popup
+
+When a board's `config.json` defines sub-board variants with a non-empty `config` array, Mixly renders a **Board Config** popup anchored to the footer bar via `FooterLayerBoardConfig`. Each entry in the `config` array produces a dropdown menu:
+
+```
+config: [
+    {
+        "label": "Processor",   // Dropdown label shown in the popup
+        "key":   "cpu",         // URL-param / compile-flag key
+        "options": [
+            { "key": "atmega328",    "label": "ATmega328P" },
+            { "key": "atmega328old", "label": "ATmega328P (Old Bootloader)" }
+        ]
+    }
+]
+```
+
+The user's selection is appended to the FQBN as a colon-separated parameter (e.g. `arduino:avr:nano:cpu=atmega328old`) and persisted in LocalStorage under the board's storage path.
+
+<Steps>
+  <Step title="Open the Board Config popup">
+    Click the board name in the footer bar. The popup appears only if the current board has at least one config option.
+  </Step>
+  <Step title="Choose a variant option">
+    Select from the dropdown(s). The chosen value is immediately stored in the board's LocalStorage entry.
+  </Step>
+  <Step title="Settings are saved on close">
+    When the popup is dismissed, `writeSelectedOptions()` is called to flush the current selection to LocalStorage. The next compile or upload will pick up the new FQBN parameters automatically.
+  </Step>
+  <Step title="Reset to defaults">
+    Click the refresh icon button inside the popup to restore all dropdowns to their default values.
+  </Step>
+</Steps>
+
+---
+
+## Board Storage Path
+
+User-selected board options are stored in LocalStorage under a templated path:
+
+```
+mixly2.0/boards/{{boardType}}/user
+```
+
+This means each board type has its own isolated preference namespace. Switching boards and back restores the last-used settings for each target independently.
+
+<Warning>
+  Clearing your browser's LocalStorage (or the Electron app's userData) resets all board configuration selections to their defaults. Export any custom configurations before clearing storage.
+</Warning>

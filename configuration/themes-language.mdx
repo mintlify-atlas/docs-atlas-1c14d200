@@ -1,0 +1,240 @@
+---
+title: "Customising Mixly's Theme and Language Settings"
+sidebarTitle: "Themes & Language"
+description: "How to switch between light, dark, and system-follow themes, change the UI language, pick a block renderer, and toggle workspace display options in Mixly."
+---
+
+Mixly stores all personalisation preferences in the browser's LocalStorage under the key `mixly2.0/user`. Every time the IDE starts, `Config.init()` reads this stored object and merges it into `Config.USER`, applying theme, language, renderer, and workspace options before any UI is painted. Changes take effect immediately for theme and most workspace options — language changes trigger a page reload.
+
+## User Preferences Object
+
+The default `Config.USER` object is:
+
+```javascript
+Config.USER = {
+    theme:         'light',
+    language:      'zh-hans',
+    winSize:       1,
+    blockRenderer: 'geras',
+    compileCAndH:  'true'
+}
+```
+
+Any key present in LocalStorage overrides the corresponding default. Optional keys such as `themeAuto`, `languageAuto`, `blocklyShowGrid`, `blocklyShowMinimap`, `blocklyContentHighlight`, and `boardIgnore` are only read when they exist.
+
+---
+
+## Themes
+
+### Available Themes
+
+<Tabs>
+  <Tab title="Light">
+    The default theme. Applies the CSS class `light` to `<body>`, switches the navigation bar to `layui-bg-green`, sets the Blockly workspace to **`Blockly.Themes.Classic`**, and uses the **`ace/theme/xcode`** code editor theme for Arduino boards or **`ace/theme/crimson_editor`** for other languages.
+
+    ```javascript
+    // Applied automatically when theme === 'light'
+    $("body").removeClass("dark").addClass("light");
+    blockEditor.setTheme(Blockly.Themes.Classic);
+    codeEditor.setOption("theme", "ace/theme/xcode");      // Arduino
+    // or
+    codeEditor.setOption("theme", "ace/theme/crimson_editor"); // Others
+    ```
+  </Tab>
+  <Tab title="Dark">
+    Applies the CSS class `dark` to `<body>`, switches the navigation bar to `layui-bg-cyan`, sets the Blockly workspace to **`Blockly.Themes.Dark`**, and switches the Ace code editor to **`ace/theme/dracula`**.
+
+    ```javascript
+    // Applied automatically when theme === 'dark'
+    $("body").removeClass("light").addClass("dark");
+    blockEditor.setTheme(Blockly.Themes.Dark);
+    codeEditor.setOption("theme", "ace/theme/dracula");
+    ```
+  </Tab>
+  <Tab title="Follow System">
+    When `themeAuto: true` is stored in LocalStorage, `Config.init()` reads `window.matchMedia("(prefers-color-scheme: light)")` once at startup to determine the initial theme. A `MediaQueryList` listener registered in `Theme` then watches for OS-level theme changes and calls `Theme.changeTo('light')` or `Theme.changeTo('dark')` reactively — no reload required.
+
+    ```javascript
+    // Config.init() — initial resolution
+    if (Config.USER.themeAuto) {
+        const themeMedia = window.matchMedia("(prefers-color-scheme: light)");
+        Config.USER.theme = themeMedia.matches ? 'light' : 'dark';
+    }
+
+    // theme.js — live listener
+    const themeMedia = window.matchMedia("(prefers-color-scheme: light)");
+    themeMedia.addListener(e => {
+        Theme.changeTo(e.matches ? 'light' : 'dark');
+    });
+    ```
+  </Tab>
+</Tabs>
+
+### How Themes Are Switched
+
+`Theme.changeTo(type)` is the single function responsible for every visual change when the theme toggles. It updates four things atomically:
+
+1. **`<body>` CSS class** — adds `light` or `dark`, removes the other.
+2. **Navigation bar colour** — `layui-bg-green` (light) vs. `layui-bg-cyan` (dark).
+3. **Blockly workspace theme** — `Blockly.Themes.Classic` (light) vs. `Blockly.Themes.Dark` (dark).
+4. **Ace editor theme** — `crimson_editor` / `xcode` (light) vs. `dracula` (dark).
+
+<Note>
+  The status bar Ace editor theme (`ace/theme/xcode` for light, `ace/theme/terminal` for dark) is defined but currently commented out in the source. Only the main code editor theme is actively changed at runtime.
+</Note>
+
+---
+
+## Language
+
+### Supported Languages
+
+| Code | Language | `navigator.language` triggers |
+|------|----------|-------------------------------|
+| `en` | English | Any locale not matching Chinese variants |
+| `zh-hans` | Simplified Chinese | `zh-CN` |
+| `zh-hant` | Traditional Chinese | `zh-HK`, `zh-SG`, `zh-TW` |
+
+The default language in `Config.USER` is `zh-hans`. To change it, open **Settings → Personalise → Language** in the IDE and select a language from the dropdown, then click **Apply**.
+
+### Auto Language Detection
+
+When `languageAuto: true` is present in LocalStorage, `Config.init()` maps `navigator.language` to one of the three supported language codes on every startup:
+
+```javascript
+if (Config.USER.languageAuto) {
+    switch (navigator.language) {
+    case 'zh-CN':
+        Config.USER.language = 'zh-hans';
+        break;
+    case 'zh-HK':
+    case 'zh-SG':
+    case 'zh-TW':
+        Config.USER.language = 'zh-hant';
+        break;
+    default:
+        Config.USER.language = 'en';
+    }
+}
+```
+
+<Tip>
+  If you are deploying Mixly in a region where the browser locale might differ from what users expect — for example a `zh-SG` locale that should render Traditional Chinese — verify your target browser's `navigator.language` value. You can always override auto-detection by setting `languageAuto: false` and hardcoding `language` to the desired code.
+</Tip>
+
+---
+
+## Block Renderer
+
+Blockly supports multiple block rendering engines. Mixly exposes two:
+
+<CardGroup cols={2}>
+  <Card title="Geras (default)" icon="shapes">
+    The classic Blockly renderer. Produces compact, densely connected blocks well suited to small screens and complex programs. This is the default and recommended option for most users.
+
+    Set with: `blockRenderer: 'geras'`
+  </Card>
+  <Card title="Zelos" icon="puzzle-piece">
+    A more spacious renderer inspired by Scratch. Blocks are rounded and visually distinct. Preferred for educational contexts or users new to block programming.
+
+    Set with: `blockRenderer: 'zelos'`
+  </Card>
+</CardGroup>
+
+The renderer is applied once during workspace initialisation via `Blockly.inject()`. The value is validated at runtime — any string other than `'geras'` or `'zelos'` silently falls back to `'geras'`:
+
+```javascript
+const renderer = ['geras', 'zelos'].includes(USER.blockRenderer)
+    ? USER.blockRenderer
+    : 'geras';
+```
+
+<Warning>
+  Changing the block renderer requires a full page reload to take effect because `Blockly.inject()` is only called once per workspace lifecycle.
+</Warning>
+
+---
+
+## Workspace Display Options
+
+These boolean preferences are stored as string `'yes'` or absence in `Config.USER` and control optional Blockly workspace plugins:
+
+<Accordion title="blocklyShowGrid">
+  When set to `'yes'`, the Blockly workspace renders a visible dot grid with 20 px spacing and block snapping enabled. Useful for pixel-perfect alignment of complex diagrams.
+
+  ```javascript
+  // Injected only when USER.blocklyShowGrid === 'yes'
+  grid: {
+      spacing: 20,
+      length: 3,
+      colour: '#ccc',
+      snap: true
+  }
+  ```
+</Accordion>
+
+<Accordion title="blocklyContentHighlight">
+  When set to `'yes'`, the **ContentHighlight** plugin is activated. This plugin visually highlights the block region currently being edited or hovered, making it easier to track focus in large programs.
+
+  ```javascript
+  if (USER.blocklyContentHighlight === 'yes') {
+      this.contentHighlight = new ContentHighlight(editor);
+      this.contentHighlight.init();
+  }
+  ```
+</Accordion>
+
+<Accordion title="blocklyShowMinimap (experimental)">
+  When set to `'yes'`, a **PositionedMinimap** overlay appears in the workspace corner, showing a birds-eye view of the entire block program. Currently marked experimental in the source and may be disabled by default in some builds.
+</Accordion>
+
+<Accordion title="blocklyMultiselect (experimental)">
+  When set to `'yes'`, the **Multiselect** plugin is loaded, enabling rubber-band selection of multiple blocks. This feature is currently commented out in the source and is listed as experimental — behaviour may change in future releases.
+</Accordion>
+
+---
+
+## Changing Settings in the UI
+
+<Steps>
+  <Step title="Open Settings">
+    Click the gear icon in the top navigation bar, then choose **Personalise** from the menu.
+  </Step>
+  <Step title="Choose Theme">
+    Select **Light**, **Dark**, or **Follow the system** from the Theme dropdown. The workspace updates immediately.
+  </Step>
+  <Step title="Choose Language">
+    Select a language from the Language dropdown. Click **Apply** to save and reload the IDE with the new language active.
+  </Step>
+  <Step title="Choose Block Renderer">
+    Select **geras** or **zelos** from the Block renderer dropdown. The change takes effect after the next page reload.
+  </Step>
+  <Step title="Save preferences">
+    Preferences are persisted automatically to LocalStorage at path `mixly2.0/user`. No manual save step is needed for theme or workspace options.
+  </Step>
+</Steps>
+
+---
+
+## LocalStorage Layout
+
+All user preferences are read from and written to LocalStorage at the path `mixly2.0/user`. The full set of keys Mixly may store includes:
+
+| Key | Type | Description |
+|-----|------|-------------|
+| `theme` | `'light' \| 'dark'` | Active theme |
+| `themeAuto` | `boolean` | Follow OS theme |
+| `language` | `'en' \| 'zh-hans' \| 'zh-hant'` | Active language |
+| `languageAuto` | `boolean` | Auto-detect language from browser |
+| `blockRenderer` | `'geras' \| 'zelos'` | Blockly renderer |
+| `winSize` | `number` | Editor pane split ratio |
+| `compileCAndH` | `'true' \| 'yes'` | Include `.c`/`.h` files during Arduino compilation |
+| `blocklyShowGrid` | `'yes'` | Show Blockly workspace grid |
+| `blocklyContentHighlight` | `'yes'` | Enable block content highlight plugin |
+| `blocklyShowMinimap` | `'yes'` | Enable workspace minimap (experimental) |
+| `boardIgnore` | `string[]` | List of `boardType` values hidden from the board selector |
+| `visitorId` | `object` | FingerprintJS visitor ID (auto-generated) |
+
+<Note>
+  The `compileCAndH` key accepts `'yes'` as the active string (checked in `arduino-shell.js` as `=== 'yes'`), while the default in `Config.USER` is initialised to `'true'`. Only `'yes'` actually enables the `.c`/`.h` compilation pass — the UI's **Compile .c and .h** toggle writes `'yes'` when enabled.
+</Note>

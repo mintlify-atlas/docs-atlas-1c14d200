@@ -1,0 +1,136 @@
+---
+title: "Understanding the Mixly Workspace Layout"
+sidebarTitle: "Workspace"
+description: "A walkthrough of every region in the Mixly IDE — navigation bar, editing area, footer bar, and the drag handles that let you resize each panel."
+---
+
+The Mixly workspace is a single-page application that arranges all of its components inside a hierarchy of resizable panels. When you open a project, the interface is divided into three horizontal regions: the top navigation bar, the central editing area, and the optional status/output bar at the bottom. Each region is managed by a dedicated class — `Mixly.Nav`, `Mixly.Workspace`, and `Mixly.FooterBar` — and the regions communicate through events rather than direct coupling.
+
+## Top Navigation Bar (`Mixly.Nav`)
+
+The navigation bar spans the full width of the window and is divided into three zones.
+
+<CardGroup cols={3}>
+  <Card title="Left Zone" icon="bars">
+    Action buttons: Undo, Redo, Compile, Upload, Burn, Run, Stop, and any board-specific buttons. On narrow windows, overflow buttons collapse into a **More** dropdown.
+  </Card>
+  <Card title="Center Zone" icon="sliders">
+    The **Board Selector** (Select2 dropdown, 150 px wide) and the **Port Selector** (100 px wide). Choosing a board fires a `changeBoard` event; choosing a port fires `changePort` and updates the footer bar's port display.
+  </Card>
+  <Card title="Right Zone" icon="ellipsis">
+    A **File** menu containing New, Open, Save, Save As, and Export As entries. Additional menus (Settings, Help) may appear depending on the active board.
+  </Card>
+</CardGroup>
+
+`Nav.getMain()` returns the singleton Nav instance. The board and port selectors are accessible via `Nav.getMain().getBoardSelector()` and `Nav.getMain().getPortSelector()` respectively.
+
+<Note>
+On small screens or when the window is resized, buttons that cannot fit in the left zone are automatically hidden from the toolbar and moved into the **More** overflow menu. The visibility logic runs on every `resize` event.
+</Note>
+
+---
+
+## Central Editing Area (`Mixly.EditorsManager`)
+
+The editing area is managed by `Mixly.EditorsManager`, which extends `PagesManager` and lives inside `Mixly.Workspace`. It provides a **tab bar** at the top (built on ChromeTabs with XScrollbar and Sortable for drag-to-reorder) and a body container below that swaps editor instances in and out as tabs change.
+
+```
+┌──────────────────────────────────────────────────────┐
+│  [Tab: Untitled-1.mix ×]  [Tab: main.py ×]  [+]     │  ← PagesTab
+├──────────────────────────────────────────────────────┤
+│                                                      │
+│   Left toolbox  │  Blockly canvas  │  Code preview  │  ← EditorMix
+│   (categories)  │   (drag canvas)  │   (read-only)  │
+│                                                      │
+└──────────────────────────────────────────────────────┘
+```
+
+The file types registered with `EditorsManager.typesRegistry` determine which editor component is instantiated for each tab:
+
+| File extension | Editor component |
+|---|---|
+| `.mix`, `.mil` | `EditorMix` (block + code split view) |
+| `.txt`, `.ino`, `.json` | `EditorCode` (Monaco text editor) |
+| `.md` | `EditorMd` (Markdown editor) |
+| Any other type | `EditorUnknown` |
+| No file open | `EditorWelcome` (welcome screen) |
+
+### Left Toolbox
+
+The left panel of `EditorMix` displays the Blockly block category toolbox. The toolbox XML is loaded from the active board's `boardIndex` file and filtered by the board's `m-show`/`m-hide` attributes at switch time. A hidden `catSearch` category is appended automatically to power the workspace search plugin.
+
+### Blockly Canvas
+
+The centre panel is the interactive Blockly workspace. Blocks are dragged from the toolbox onto the canvas, connected together, and serialised to XML when the file is saved. The canvas supports mouse-wheel zoom (scale speed `1.03`) and optional snap-to-grid (20 px spacing, 3 px markers).
+
+### Code Preview Panel
+
+The right panel shows the generated source code (read-only by default). It updates live whenever blocks change, as long as the split-view drag handle is in the **Mix** position (both panels visible). Switching to full Code mode makes the panel writable.
+
+---
+
+## Drag Handles (`Mixly.DragH` / `Mixly.DragV`)
+
+`Mixly.Workspace` wires up drag handles that let users resize panels at runtime:
+
+<CardGroup cols={2}>
+  <Card title="Horizontal handle (DragH)" icon="arrows-up-down">
+    Sits between the editing area and the status/output bar. Dragging it down hides the output panel; dragging it up reveals it. Minimum size is `50 px`; the panel starts at `100 %` (hidden) and expands to `70 %` when first opened.
+  </Card>
+  <Card title="Vertical handle (DragV)" icon="arrows-left-right">
+    Inside `EditorMix`, separates the Blockly canvas from the code preview. Minimum width is `200 px`. It can be driven to full-left (Block-only) or full-right (Code-only) by the **Block / Mix / Code** mode buttons.
+  </Card>
+</CardGroup>
+
+Every time a drag handle changes size it calls `Workspace.resize()`, which propagates down through `EditorsManager`, `LeftSideBarsManager`, `RightSideBarsManager`, and `StatusBarsManager`.
+
+---
+
+## Footer Bar (`Mixly.FooterBar`)
+
+The footer bar is a fixed-height strip pinned to the bottom of the page. It is created by `new FooterBar()` which internally calls `Boards.init()` to populate the board selector dropdown.
+
+<CardGroup cols={3}>
+  <Card title="Board Config" icon="microchip">
+    Clicking the board name opens `FooterLayerBoardConfig` — a panel for configuring board-specific options such as CPU frequency, flash size, and serial port speed.
+  </Card>
+  <Card title="Examples" icon="book-open">
+    The examples button opens `FooterLayerExample`, which lists bundled example programs for the selected board (implementation differs between Electron and web modes).
+  </Card>
+  <Card title="Messages" icon="message-lines">
+    The message button opens `FooterLayerMessage`, a panel that shows board-related messages and notifications.
+  </Card>
+</CardGroup>
+
+The footer also displays the **current language** (e.g. `MicroPython`, `C/C++`), the **active board name**, and — after a port is selected — the **port identifier**. These are updated reactively via `#mixly-footer-boardname` and `#mixly-footer-port` DOM elements.
+
+---
+
+## Component Lifecycle
+
+All visible components in Mixly inherit from `Mixly.Component` and follow a consistent lifecycle:
+
+<Steps>
+  <Step title="Construction">
+    The component renders its HTML from `HTMLTemplate`, stores DOM references, and wires up internal event listeners.
+  </Step>
+  <Step title="Mount">
+    `mountOn(element)` attaches the component to the DOM. `onMounted()` is called, which starts any plugins or observers that require a live DOM.
+  </Step>
+  <Step title="Resize">
+    `resize()` is called whenever the window or a parent drag handle changes size. Each component re-measures itself and forwards the call to its children.
+  </Step>
+  <Step title="Dispose">
+    `dispose()` detaches the component, removes event listeners, and recursively disposes children.
+  </Step>
+</Steps>
+
+`Workspace.getMain()` returns the primary `Workspace` instance. From it you can reach every other subsystem:
+
+```js
+const ws = Mixly.Workspace.getMain();
+const editorsManager  = ws.getEditorsManager();
+const statusBars      = ws.getStatusBarsManager();
+const leftSideBars    = ws.getLeftSideBarsManager();
+const rightSideBars   = ws.getRightSideBarsManager();
+```

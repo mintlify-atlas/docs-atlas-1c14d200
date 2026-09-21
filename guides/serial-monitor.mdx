@@ -1,0 +1,139 @@
+---
+title: "Using the Serial Monitor and Chart in Mixly IDE"
+sidebarTitle: "Serial Monitor"
+description: "Open the serial monitor from the Mixly footer bar to read board output, send commands, view timestamps, display hex data, and plot live numeric data as a chart."
+---
+
+The Mixly serial monitor lives in the status bar at the bottom of the IDE window. Each serial port you connect to gets its own tab, so you can have multiple boards open simultaneously. Within each tab you can switch between a text output view and a real-time line chart that plots numeric data as the board sends it. The monitor works in both the Electron desktop app and the browser via the WebSerial API.
+
+## Opening the Serial Monitor
+
+<Steps>
+  <Step title="Select a serial port">
+    In the Mixly status bar, click the port selector dropdown and choose the serial port your board is connected to. In browser mode, this triggers the WebSerial permission prompt.
+  </Step>
+  <Step title="Open the port tab">
+    After uploading a program, Mixly automatically opens a serial monitor tab for the upload port. You can also manually add a tab by clicking the **+** button in the status bar and selecting the port name.
+  </Step>
+  <Step title="Connect to the port">
+    The tab indicator is blue while the port is closed. Click the tab or use the toolbar connect button to open the connection. The indicator turns orange when the port is open and receiving data.
+  </Step>
+  <Step title="Read output">
+    Data from the board appears in the text output pane. The monitor batches incoming characters and refreshes at up to 20 Hz (every 50 ms) to avoid overwhelming the UI during high-speed output.
+  </Step>
+</Steps>
+
+## Selecting Baud Rate
+
+The baud rate selector is a dropdown in the serial monitor toolbar. Available rates include all standard values. When you change the baud rate while the port is open, Mixly calls `setBaudRate()` on the underlying serial connection immediately without closing and reopening the port.
+
+<Tip>
+  Match the baud rate in Mixly to the value you pass to `Serial.begin()` in your Arduino sketch or `uart.init(baudrate=...)` in your MicroPython program. A mismatch produces garbled output.
+</Tip>
+
+The default baud rate is **115200**.
+
+## Sending Commands
+
+Type a command or value into the input field in the send bar at the bottom of the serial monitor and press **Enter** to transmit it. The line ending appended to the transmission is configurable:
+
+| Setting | Bytes sent |
+|---|---|
+| `\r\n` (default) | Carriage return + newline |
+| `\n` | Newline only |
+| `\r` | Carriage return only |
+| None | Raw string, no terminator |
+
+You can also send raw hexadecimal bytes by enabling the **Hex** checkbox on the send bar, then entering values as space-separated hex pairs (e.g. `0A 0D FF`).
+
+## DTR and RTS Signals
+
+Two checkboxes in the serial monitor toolbar control the hardware handshaking lines:
+
+- **DTR (Data Terminal Ready)** — enabled by default. Many Arduino boards use DTR to trigger the auto-reset circuit before upload. Enabling DTR while the monitor is open may cause some boards to reset.
+- **RTS (Request to Send)** — disabled by default.
+
+Changes to DTR and RTS take effect immediately if the port is already open, by calling `setDTR()` / `setRTS()` on the underlying serial interface. For MicroPython boards (e.g. ESP32 with `ctrlCBtn` set in the board config), the monitor sends an interrupt signal (`Ctrl+C`) followed by a reset (`Ctrl+D`) on open to stop any running program before reading output.
+
+## Output Options
+
+The text output panel has three toggles:
+
+| Toggle | Effect |
+|---|---|
+| **Scroll** | Auto-scrolls to the bottom on new data (enabled by default) |
+| **Timestamp** | Prepends `HH:mm:ss.SSS ->` to each new line |
+| **Hex** | Shows each received byte as `0xNN` instead of the character |
+
+The output buffer is capped at **200 lines**. Older lines are automatically removed when the buffer is full to keep memory usage stable.
+
+### Keyboard Shortcuts
+
+The status bar output panel supports the following keyboard shortcuts when the output area has focus:
+
+| Action | Shortcut |
+|---|---|
+| Increase font size | `Ctrl` + `=` or `Ctrl` + `+` |
+| Decrease font size | `Ctrl` + `-` |
+| Send Ctrl+C to board | `Ctrl` + `Shift` + `C` |
+| Send Ctrl+D to board | `Ctrl` + `Shift` + `D` |
+| Clear the output | `Ctrl` + `E` |
+
+`Ctrl+C` sends an interrupt signal and `Ctrl+D` sends a soft reset — these are the standard MicroPython REPL control sequences. On MicroPython boards you can use these to stop a running program and enter the interactive REPL without physically pressing the reset button.
+
+You can also right-click the output area to access the context menu, which exposes **Interrupt (Ctrl+C)**, **Reset (Ctrl+D)**, and **Toggle port** items.
+
+## Text Output vs Chart Mode
+
+<Tabs>
+  <Tab title="Text Output">
+    The default view. All received bytes appear as characters (or hex if the Hex toggle is on). This is the right mode for:
+
+    - General debugging with `Serial.print()` / `print()`
+    - REPL interaction with MicroPython
+    - Reading structured strings or JSON from the board
+    - Monitoring log messages
+
+    **Clear the output** at any time by clicking the trash/empty button in the toolbar or pressing `Ctrl+E`.
+
+    The output panel is a read-only Ace editor instance, which means you get syntax highlighting, find (`Ctrl+F`), and proper monospace rendering at any font size.
+  </Tab>
+  <Tab title="Chart Mode">
+    Click the **Chart** tab inside the serial monitor panel to switch to live plotting mode. The chart is rendered using **Flot** (jQuery charting library) and updates up to 20 times per second.
+
+    **Data format:** The board must send individual numeric values as plain ASCII decimal strings, one per line. The serial monitor calls `parseFloat()` on each complete line received; non-numeric lines are silently ignored.
+
+    For example, an Arduino sketch that sends a sensor reading:
+    ```cpp
+    void loop() {
+      int val = analogRead(A0);
+      Serial.println(val);
+      delay(50);
+    }
+    ```
+
+    Would produce a chart of the analog value over time.
+
+    **Chart settings:**
+
+    | Setting | Description |
+    |---|---|
+    | **Points** | Number of data points visible on the x-axis (default: 100, configurable via board config `serial.pointNum`) |
+    | **Y Max** | Upper bound of the y-axis (default: 100, configurable via `serial.yMax`) |
+    | **Y Min** | Lower bound of the y-axis (default: 0, configurable via `serial.yMin`) |
+
+    The x-axis uses wall-clock time (milliseconds since epoch) so the chart shows actual elapsed time rather than sample index. A linear regression is used to predict and extend the x-axis range when fewer samples than the configured `pointNum` have been received.
+
+    **Switching views:** Switching between the Output and Chart tabs does not close the serial connection or discard buffered data. Text output accumulates in the background even while the Chart tab is active.
+  </Tab>
+</Tabs>
+
+## Connecting Multiple Boards
+
+You can open serial monitor tabs for several boards simultaneously. Each tab is fully independent — its own baud rate, DTR/RTS state, and output history. Tab indicators show blue (closed) or orange (open) so you can see at a glance which ports are active.
+
+Double-clicking a tab that is already open will toggle (close) the port connection.
+
+<Warning>
+  Closing a serial monitor tab also closes the underlying serial port and disposes the connection. If you need to re-upload to the same board, Mixly will automatically close the monitor tab for that port before starting the upload.
+</Warning>

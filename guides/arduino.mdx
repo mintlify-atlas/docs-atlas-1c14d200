@@ -1,0 +1,145 @@
+---
+title: "Programming Arduino Boards with Mixly IDE"
+sidebarTitle: "Arduino"
+description: "Build Arduino sketches visually using drag-and-drop blocks for AVR, ESP32, and ESP8266 boards, then compile and upload with arduino-cli directly from Mixly."
+---
+
+Mixly turns Arduino development into a drag-and-drop experience. You assemble a program by connecting blocks, Mixly's code generator translates them into valid C/C++ in real time, and a bundled `arduino-cli` handles compilation and upload — no separate IDE required. This guide covers every step from board selection through the first blink, and explains the full block library available for each Arduino family.
+
+## Supported Arduino Boards
+
+Three Arduino-family board packages ship with Mixly by default. All three use C/C++ as their code language and are compiled by `arduino-cli`.
+
+<CardGroup cols={3}>
+  <Card title="Arduino AVR" icon="microchip">
+    Classic AVR boards (Uno, Nano, Mega, etc.). Electron-only upload; web compilation is available when a web-compiler endpoint is configured.
+  </Card>
+  <Card title="Arduino ESP8266" icon="wifi">
+    NodeMCU, Wemos D1 Mini, and other ESP8266 modules. Electron-only upload.
+  </Card>
+  <Card title="Arduino ESP32" icon="bolt">
+    ESP32 DevKit variants. Electron-only upload with full peripheral support including Wi-Fi, BLE, and hardware timers.
+  </Card>
+</CardGroup>
+
+<Note>
+  The `web` field for all three Arduino boards is `false` in `boards.json`, which means direct upload from the browser is not supported. You must use the Electron desktop app to compile and upload to Arduino boards.
+</Note>
+
+## Block Categories
+
+The Arduino AVR board exposes twenty block categories in the Blockly toolbox. The same categories are mirrored for ESP8266 and ESP32 with board-specific pin sets and peripherals.
+
+| Category | What it covers |
+|---|---|
+| **inout** | `pinMode`, `digitalWrite`, `digitalRead`, `analogWrite`, `analogRead`, HIGH/LOW constants |
+| **control** | `setup`/`loop` structure, `delay`, `millis`, `if`, `for`, `while` |
+| **logic** | Boolean operators, comparisons, `if-else` |
+| **math** | Arithmetic, random numbers, trigonometry, `map` |
+| **text** | String creation, concatenation, conversion |
+| **variables** | Variable declaration and assignment |
+| **lists** | Array creation and element access |
+| **procedures** | Function definition and call |
+| **serial** | `Serial.begin`, `Serial.print`, `Serial.println`, `Serial.read` |
+| **sensor** | DHT temperature/humidity, ultrasonic, IR receive, and more |
+| **actuator** | Servo, stepper motor, buzzer, RGB LED |
+| **display** | LCD 1602/2004, OLED, TFT color screen, matrix LED |
+| **communicate** | I²C, SPI, software serial |
+| **storage** | SD card, EEPROM read/write |
+| **ethernet** | Ethernet shield, Wi-Fi (ESP boards) |
+| **blynk** | Blynk IoT platform integration |
+| **pins** | Named pin dropdowns (board-specific) |
+| **tools** | Type casting, bitwise ops, raw code injection |
+| **scoop** | Data logging helpers |
+| **factory** | Advanced board-specific factory blocks |
+
+## Selecting Your Board and Port
+
+<Steps>
+  <Step title="Open the board selector">
+    On the Mixly home screen, click the board card that matches your hardware — **Arduino AVR**, **Arduino ESP8266**, or **Arduino ESP32**. The corresponding toolbox and pin profile load automatically.
+  </Step>
+  <Step title="Connect your board via USB">
+    Plug in your Arduino using a data-capable USB cable. The operating system should enumerate a serial port (e.g. `COM3` on Windows, `/dev/ttyUSB0` on Linux, `/dev/cu.usbserial-*` on macOS).
+  </Step>
+  <Step title="Select the serial port">
+    In the Mixly status bar at the bottom of the screen, click the serial-port dropdown and choose the port that appeared when you plugged in your board.
+  </Step>
+  <Step title="Choose the exact board variant (AVR)">
+    For Arduino AVR you may also need to pick the specific board model (Uno, Nano, Mega…) and processor from the board configuration panel so `arduino-cli` passes the correct FQBN to the compiler.
+  </Step>
+</Steps>
+
+## Block Categories and the Blink Example
+
+The fastest way to verify your setup is to blink the built-in LED on pin 13. Here is how to build and understand the program using blocks only.
+
+### Building the Blink Program
+
+Drag the following blocks from the toolbox:
+
+1. **control → setup / loop** — the top-level structure block (generated automatically)
+2. **inout → digitalWrite** — drop one inside `loop`, set PIN to `13`, STAT to `HIGH`
+3. **control → delay** — drop after the first `digitalWrite`, set to `1000` ms
+4. **inout → digitalWrite** — drop a second one, PIN `13`, STAT to `LOW`
+5. **control → delay** — another 1000 ms
+
+The generated C++ code preview on the right should look like:
+
+```cpp
+void setup() {
+  pinMode(13, OUTPUT);
+}
+
+void loop() {
+  digitalWrite(13, HIGH);
+  delay(1000);
+  digitalWrite(13, LOW);
+  delay(1000);
+}
+```
+
+<Tip>
+  The `inout_digital_write2` block automatically injects `pinMode(pin, OUTPUT)` into `setup()` the first time a pin is used as an output, so you do not need to add a separate `pinMode` block.
+</Tip>
+
+## Compiling and Uploading
+
+<Steps>
+  <Step title="Verify the program (compile only)">
+    Click the **Verify** (✓) button in the toolbar. Mixly invokes `arduino-cli compile` with the correct FQBN for your board. Compiler output streams into the **Output** tab in the status bar. A green banner confirms success; errors appear in red with line numbers.
+  </Step>
+  <Step title="Upload to the board">
+    Click the **Upload** (→) button. Mixly runs `arduino-cli upload` targeting the selected serial port. The status bar shows upload progress. When complete, a success toast appears and the serial monitor tab opens automatically (if **Auto Open Port** is enabled in user settings).
+  </Step>
+  <Step title="Watch the LED blink">
+    The built-in LED (pin 13) should now blink at 1-second intervals, confirming the program is running on the board.
+  </Step>
+  <Step title="Open the serial monitor (optional)">
+    If your sketch calls `Serial.begin(9600)` and `Serial.println(...)`, click the serial port tab in the status bar to open the serial monitor and see the output.
+  </Step>
+</Steps>
+
+<Warning>
+  If the upload fails with a "port not found" error, make sure no other application (the Arduino IDE, a serial terminal, etc.) has the port open. The upload process requires exclusive access to the serial port.
+</Warning>
+
+## Configuring the arduino-cli Path
+
+Mixly bundles its own copy of `arduino-cli` inside the board package, but you can point it at a different binary by editing `sw-config.json` in the Mixly root directory:
+
+```json
+{
+  "defaultPath": {
+    "win32":  { "arduinoCli": "C:\\tools\\arduino-cli.exe" },
+    "darwin": { "arduinoCli": "/usr/local/bin/arduino-cli" },
+    "linux":  { "arduinoCli": "/usr/bin/arduino-cli" }
+  }
+}
+```
+
+Set the value to `"None"` (the default) to use the bundled binary.
+
+## Viewing Compile Output
+
+All compiler messages — warnings, errors, memory usage — appear in the **Output** tab of the Mixly status bar. The status bar shows at the bottom of the window and can be toggled with the toolbar button. Error lines in the output are clickable and scroll the code preview to the corresponding line.

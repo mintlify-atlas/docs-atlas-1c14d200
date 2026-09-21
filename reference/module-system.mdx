@@ -1,0 +1,318 @@
+---
+title: "Mixly Custom Module Loading System Explained"
+sidebarTitle: "Module System"
+description: "How Mixly's goog.loadJs module system works: namespace registration, dependency resolution, environment splitting, and the deps.json manifest format."
+---
+
+Every JavaScript file in the Mixly source tree is wrapped in a `goog.loadJs` call. This is not Google Closure Compiler — it is a lightweight, custom module system built on top of the Closure `base.js` dependency graph, extended in `common/main.js`. Understanding it is required before reading any Mixly source file or writing a new module.
+
+## Core Concepts
+
+<CardGroup cols={2}>
+  <Card title="goog.loadJs" icon="box">
+    Registers a module into the 'common', 'electron', or 'web' namespace. Only executes when the current runtime matches.
+  </Card>
+  <Card title="goog.provide / goog.require" icon="link">
+    Declares what a file exports onto the global `Mixly` object, and what it depends on. Used by the dependency graph to load files in order.
+  </Card>
+  <Card title="goog.isElectron" icon="split">
+    Boolean flag set once at boot. Controls which implementation of split modules is selected at runtime.
+  </Card>
+  <Card title="deps.json" icon="file-json">
+    Machine-readable manifest listing every module's file path, `provide` symbols, and `require` symbols. Loaded at boot to register the full dependency graph.
+  </Card>
+</CardGroup>
+
+## How `goog.loadJs` Works
+
+`goog.loadJs` is defined in `common/main.js`. Its implementation is a single guard:
+
+```js
+// common/main.js — goog.loadJs definition
+goog.loadJs = (type, func) => {
+    if (type !== goog.NOW_ENV && type !== 'common') {
+        return;
+    }
+    func();
+}
+```
+
+`goog.NOW_ENV` is either `'electron'` or `'web'`, determined once at boot:
+
+```js
+// common/main.js — environment detection
+goog.NOW_ENV = window?.process?.versions?.electron ? 'electron' : 'web';
+goog.isElectron = goog.NOW_ENV === 'electron';
+```
+
+A module file therefore executes **only** if its declared namespace matches the runtime, or if its namespace is `'common'` (which runs everywhere). Files in `electron/` use `goog.loadJs('electron', ...)`, files in `web/` use `goog.loadJs('web', ...)`, and files in `common/` use `goog.loadJs('common', ...)`.
+
+## Standard Module Pattern
+
+Every Mixly source file follows the same structure. Here is the pattern from `common/component.js`:
+
+```js
+goog.loadJs('common', () => {
+
+// 1. Declare dependencies
+goog.require('Mixly.Events');
+goog.require('Mixly.IdGenerator');
+
+// 2. Declare this module's export
+goog.provide('Mixly.Component');
+
+// 3. Destructure dependencies from the global Mixly object
+const { Events, IdGenerator } = Mixly;
+
+// 4. Define the module
+class Component {
+    #events_ = new Events(['destroyed', 'created']);
+    #id_     = IdGenerator.generate();
+
+    mountOn($container) {
+        $container.append(this.getContent());
+        this.onMounted();
+    }
+    // ...
+}
+
+// 5. Attach to the global Mixly namespace (matches goog.provide)
+Mixly.Component = Component;
+
+});
+```
+
+<Steps>
+  <Step title="goog.loadJs declares the namespace">
+    Pass `'common'`, `'electron'`, or `'web'`. The callback only runs if the runtime environment matches.
+  </Step>
+  <Step title="goog.require lists dependencies">
+    Each `goog.require('Mixly.Foo')` tells the dependency loader that `Mixly.Foo` must be available before this file executes. It also works for third-party libraries like `'layui'` or `'path'`.
+  </Step>
+  <Step title="goog.provide declares the export">
+    `goog.provide('Mixly.Bar')` creates the `Mixly.Bar` namespace path on `window` and registers this file as the provider of that symbol.
+  </Step>
+  <Step title="Assign to Mixly namespace">
+    At the end of the callback, assign the exported value to the path declared by `goog.provide`. This makes it available to any module that calls `goog.require('Mixly.Bar')`.
+  </Step>
+</Steps>
+
+## Electron vs. Web Split
+
+Many subsystems have two implementations: one for Electron (using Node.js APIs) and one for the browser (using Web APIs). Both implementations provide the same `goog.provide` symbol under the namespaced path `Mixly.Electron.Foo` or `Mixly.Web.Foo`.
+
+Consumer modules `goog.require` both variants, then select one at runtime with `goog.isElectron`:
+
+```js
+// common/app.js — selecting between Electron and Web implementations
+goog.require('Mixly.Electron.Serial');
+goog.require('Mixly.Web.Serial');
+
+const {
+    Electron = {},
+    Web = {}
+} = Mixly;
+
+// Select the correct implementation at module load time
+const { Serial } = goog.isElectron ? Electron : Web;
+
+// The rest of the module uses `Serial` without any further branching
+Serial.refreshPorts();
+```
+
+The same pattern appears in `EditorsManager`, `StatusBarSerial`, `SideBarLocalStorage`, and many others. Because the selection is made once (at module evaluation time), all subsequent calls within the module use the already-resolved implementation.
+
+### Electron-only modules
+
+Some modules exist only for Electron and have no web counterpart. These are simply wrapped in `goog.loadJs('electron', ...)` so they never execute in a browser context:
+
+```js
+// electron/events.js — Electron-only IPC listener
+goog.loadJs('electron', () => {
+
+goog.require('Mixly.Command');
+goog.require('Mixly.Config');
+goog.require('Mixly.Electron');
+goog.provide('Mixly.Electron.Events');
+
+const electron = Mixly.require('electron');
+const ipcRenderer = electron.ipcRenderer;
+
+ipcRenderer.on('command', (event, message) => {
+    const commandObj = Command.parse(message);
+    Command.run(commandObj);
+});
+
+});
+```
+
+<Note>
+`Mixly.require(moduleName)` is a safe wrapper around Node.js `require()`. It returns `undefined` in web mode instead of throwing, so code that calls it is safe to compile into common modules without environment guards.
+</Note>
+
+## File I/O Helpers
+
+### `goog.get(path)`
+
+Reads a file synchronously and returns its text content as a string. Used throughout the codebase to load HTML template files at module initialization time:
+
+```js
+// common/app.js — loading an HTML template at module init
+class App extends Component {
+    static {
+        HTMLTemplate.add(
+            'html/app.html',
+            new HTMLTemplate(goog.get(path.join(Env.templatePath, 'html/app.html')))
+        );
+    }
+}
+```
+
+In Electron/NW.js environments, `goog.get` uses `fs.readFileSync`. In browser environments it falls back to a synchronous `$.get` (jQuery AJAX with `$.ajaxSettings.async = false`). Results are cached in `goog.files` to avoid repeated requests.
+
+```js
+// common/main.js — goog.get implementation
+goog.get = (inPath) => {
+    if (goog.files[inPath]) {
+        return goog.files[inPath];     // cache hit
+    }
+    // Electron / NW.js path
+    if (typeof nw === 'object') {
+        str = fs.readFileSync(inPath, 'utf-8');
+    } else {
+        // Browser path — synchronous XHR via jQuery
+        $.ajaxSettings.async = false;
+        $.get(inPath, (data) => { str = data; }, 'text');
+        $.ajaxSettings.async = true;
+    }
+    goog.files[inPath] = str;
+    return str;
+}
+```
+
+### `goog.getJSON(path, defaultValue)`
+
+Reads a JSON file via `goog.get`, strips comments (both `//` and `/* */` styles), parses the result, and merges it with `defaultValue` using spread. Used for board configs and software settings:
+
+```js
+// common/config.js — reading board config
+Config.BOARD = {
+    ...goog.getJSON(path.join(Env.boardDirPath, 'config.json'), BOARD_DEFAULT_CONFIG),
+};
+Config.SOFTWARE = goog.getJSON(
+    path.join(pathPrefix, 'sw-config.json'),
+    SOFTWARE_DEFAULT_CONFIG
+);
+```
+
+### `goog.platform()`
+
+Returns a string identifying the host OS by examining `navigator.userAgent`. Returns `'win32'`, `'darwin'`, `'linux'`, `'mobile'`, or `'other'`:
+
+```js
+// common/env.js — platform detection
+Env.currentPlatform = goog.platform();
+```
+
+## The `deps.json` Manifest
+
+`common/modules/mixly-modules/deps.json` is the registry of all Mixly modules. It is loaded at boot by `goog.initDependencies()` and used to build the Closure dependency graph that resolves `goog.require` calls.
+
+Each entry has three fields:
+
+```json
+{
+    "path": "/common/workspace.js",
+    "require": [
+        "path",
+        "Mixly.XML",
+        "Mixly.Env",
+        "Mixly.EditorsManager",
+        "Mixly.StatusBarsManager",
+        "Mixly.LeftSideBarsManager",
+        "Mixly.RightSideBarsManager",
+        "Mixly.Component"
+    ],
+    "provide": [
+        "Mixly.Workspace"
+    ]
+}
+```
+
+| Field | Description |
+|-------|-------------|
+| `path` | File path relative to the `mixly-modules/` directory root |
+| `require` | Symbols or Node module names this file depends on. These must be available before this file loads. |
+| `provide` | Symbols this file registers. Other modules `goog.require` these names. |
+
+At boot, `goog.initDependencies()` reads `deps.json` from each path in `goog.MIXLY_DIR_PATH`, prepends the correct relative base, and calls `goog.addDependency()` for each entry to register it in the Closure debug loader:
+
+```js
+// common/main.js — dependency graph initialization
+goog.initDependencies = () => {
+    for (let path of goog.MIXLY_DIR_PATH) {
+        const depsJson = goog.getJSON(
+            goog.normalizePath_(goog.basePath + path + '/deps.json'),
+            {}
+        );
+        if (depsJson && typeof depsJson === 'object') {
+            for (let i in depsJson) {
+                depsJson[i].path = path + depsJson[i].path;
+                goog.DEPENDENCIES.push(depsJson[i]);
+            }
+        }
+    }
+    goog.addDependencies(goog.DEPENDENCIES);
+}
+
+goog.initDependencies();
+goog.require('Mixly.Loader');   // kick off the entire application load
+```
+
+The final `goog.require('Mixly.Loader')` is the single entry point that triggers transitive loading of the entire application.
+
+## Adding a New Module
+
+<Steps>
+  <Step title="Create the file in the right namespace directory">
+    Place it in `common/`, `electron/`, or `web/` under `mixly-modules/` depending on where it should run.
+  </Step>
+  <Step title="Write the module body">
+    Use the standard pattern: `goog.loadJs`, `goog.require` for dependencies, `goog.provide` for your export, and assign to `Mixly.YourModule` at the end.
+
+    ```js
+    goog.loadJs('common', () => {
+
+    goog.require('Mixly.Events');
+    goog.provide('Mixly.MyModule');
+
+    const { Events } = Mixly;
+
+    class MyModule {
+        // ...
+    }
+
+    Mixly.MyModule = MyModule;
+
+    });
+    ```
+  </Step>
+  <Step title="Register in deps.json">
+    Add an entry to `common/modules/mixly-modules/deps.json` with the correct `path`, `require`, and `provide` arrays. Without this entry, `goog.require('Mixly.MyModule')` will throw at runtime.
+
+    ```json
+    {
+        "path": "/common/my-module.js",
+        "require": ["Mixly.Events"],
+        "provide": ["Mixly.MyModule"]
+    }
+    ```
+  </Step>
+  <Step title="Require it where needed">
+    In any consuming module, add `goog.require('Mixly.MyModule')` before the callback body and destructure it from `Mixly`.
+  </Step>
+</Steps>
+
+<Warning>
+The `path` field in `deps.json` must begin with a `/` and be relative to the `mixly-modules/` directory root (e.g., `/common/my-module.js`). The boot loader prepends the correct base path automatically. A missing or mis-cased entry will cause a silent load failure.
+</Warning>

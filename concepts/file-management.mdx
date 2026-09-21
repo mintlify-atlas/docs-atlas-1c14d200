@@ -1,0 +1,195 @@
+---
+title: "File Management in Mixly: Saving, Opening, and Formats"
+sidebarTitle: "File Management"
+description: "How Mixly's .mix XML format works, the open/save/save-as workflow, tab dirty-state tracking, PNG export, and all keyboard shortcuts for file operations."
+---
+
+Mixly organises your work into files opened as tabs. The primary format is `.mix` — an XML dialect that stores your Blockly workspace, the active board configuration, and a Base64-encoded snapshot of the generated code. Understanding this format and the file-management operations around it helps you move projects between machines, share them with others, and integrate Mixly into larger workflows.
+
+## The `.mix` File Format
+
+A `.mix` file is a UTF-8 XML document composed of up to three sibling elements at the root:
+
+```xml
+<xml version="Mixly 2.0" board="arduino_esp32@Arduino ESP32" shown="block">
+  <block type="controls_setup" x="100" y="80">
+    <!-- all Blockly blocks serialised by Blockly.Xml.workspaceToDom() -->
+  </block>
+</xml>
+<config>{"board":"esp32:esp32:esp32","cpu_freq":"240"}</config>
+<code>cHJpbnQoImhlbGxvIik=</code>
+```
+
+| Element | Content | Required |
+|---|---|:---:|
+| `<xml>` | Blockly workspace DOM. Carries `version`, `board` (`boardType@boardName`), and `shown` (`block` or `code`) attributes. | ✓ |
+| `<config>` | JSON string of the selected board configuration options (CPU freq, flash size, etc.). | Optional |
+| `<code>` | Base64-encoded source code snapshot. Lets you reopen the file in Code mode even on a machine without the matching board package. | Optional |
+
+The `shown` attribute controls which mode the editor restores on open:
+- `shown="block"` → Blockly canvas is shown (Block or Mix mode).
+- `shown="code"` → Monaco editor is shown (Code mode), and the saved code is loaded instead of regenerating from blocks.
+
+<Note>
+`.xml` files are treated identically to `.mix` files when opening. The editor also accepts `.mil` (Mixly library format) files, which are stripped-down `.mix` files with `type="lib"` and no positional information or duplicate blocks.
+</Note>
+
+---
+
+## Opening Files
+
+<Steps>
+  <Step title="Click File → Open in the navbar">
+    The **Open** item under the **File** right-menu calls `File.open()`. In the Electron desktop app this opens a native OS file picker filtered to `.mix` and `.xml` (plus any additional extensions defined by the active board, e.g. `.py`, `.ino`). In the browser over HTTPS, the Web File System Access API's `window.showOpenFilePicker()` is used; over HTTP, a hidden `<input type="file">` is used as a fallback.
+  </Step>
+  <Step title="Select the file">
+    The selected file's extension is checked against the registered open filters. Recognised extensions (`.mix`, `.xml`, `.py`, `.ino`) are passed to the active editor's `setValue(data, ext)` method. Unknown extensions show an error toast.
+  </Step>
+  <Step title="Parse and display">
+    For `.mix` / `.xml` files, `EditorMix.parseMix()` deserialises the XML, restores the board selection and config, loads the blocks into the Blockly workspace, and — if `shown="code"` — decodes and displays the saved code in Monaco. If the file contains block types that are not available in the current board package, a dialog offers three options: cancel, ignore missing blocks, or load the saved code instead.
+  </Step>
+</Steps>
+
+<Tip>
+In the Electron app you can associate `.mix` files with Mixly at the OS level. Double-clicking a `.mix` file then opens it directly in a new Mixly window via the `open-file` IPC event in `main.js`.
+</Tip>
+
+---
+
+## Saving Files
+
+<Steps>
+  <Step title="Save (first time)">
+    If no file path is associated with the current editor tab (`File.openedFilePath` is `null`), calling **Save** automatically falls through to **Save As**.
+  </Step>
+  <Step title="Save As">
+    Opens the native OS save dialog (Electron) or the File System Access `showSaveFilePicker()` (browser). The dialog is pre-filtered by the board's supported export types — `.mix` is always available; boards may additionally offer `.py`, `.ino`, `.hex`, `.bin`, or `.mil`.
+    
+    The saved filename and directory are stored in `File.openedFilePath` and `File.workingPath` so subsequent saves go to the same location without re-prompting.
+  </Step>
+  <Step title="Subsequent saves">
+    Once a path is known, **Save** writes the current `editor.getValue()` output directly to disk (Electron: `fs-extra.outputFile`; browser: `FileSystemWritableFileStream`) and shows a brief toast notification.
+  </Step>
+</Steps>
+
+### What gets serialised
+
+`EditorMix.getValue()` assembles the full `.mix` content on every save:
+
+```js
+// Simplified from editor-mix.js
+getValue() {
+    const mix = blockPage.getMix();          // { block: xmlString, code: generatedCode }
+    const $xml = $(mix.block);
+    $xml.attr('version', SOFTWARE.version)
+        .attr('board', boardType + '@' + boardName)
+        .attr('shown', this.drag.shown !== 'code' ? 'block' : 'code');
+    let xml = $xml[0].outerHTML;
+    if (config) xml += `<config>${MJSON.stringify(config)}</config>`;
+    xml += `<code>${Base64.encode(code)}</code>`;
+    return xml;
+}
+```
+
+---
+
+## Tab Dirty-State Tracking
+
+Mixly tracks whether each open tab has unsaved changes via the `PageBase` dirty-state mechanism. This is entirely in-memory — there is no autosave to disk.
+
+- When any structural change occurs in the Blockly workspace or the Monaco editor fires a `change` event, the page calls `addDirty()`.
+- `addDirty()` adds the CSS class `dirty` to the Chrome tab element and fires an `addDirty` event that the `EditorsManager` uses to update the tab title with a `- 未保存` (unsaved) suffix.
+- After a successful save, `removeDirty()` clears the class and the title suffix.
+
+```
+Tab title: "project.mix"          ← clean
+Tab title: "project.mix - 未保存" ← dirty (unsaved changes)
+```
+
+<Warning>
+If you close a tab with unsaved changes, those changes are lost. There is no autosave or recovery file. Save frequently using `Ctrl+S` (or `Cmd+S` on macOS).
+</Warning>
+
+---
+
+## Exporting a Workspace Screenshot (PNG)
+
+To save a PNG image of your Blockly canvas, right-click on any empty area of the Blockly workspace and choose **Download Screenshot** from the context menu. This calls `Blockly.Screenshot.downloadScreenshot(editor)` from the Blockly Screenshot plugin, which renders the entire workspace (including off-screen blocks) to a canvas element and triggers a browser download.
+
+<Note>
+The screenshot option is only available when there is at least one block on the canvas. It does not capture the toolbox or the code panel — only the Blockly drawing area.
+</Note>
+
+---
+
+## Keyboard Shortcuts
+
+### File Operations
+
+| Action | Shortcut |
+|---|:---:|
+| New file (in current window) | `Ctrl+N` / `Cmd+N` |
+| Save As | `Ctrl+Shift+S` / `Cmd+Shift+S` |
+| Open changelog / help | `Ctrl+H` / `Cmd+H` |
+
+<Note>
+A dedicated **Save** shortcut (`Ctrl+S`) is referenced in the status-bar context menu source but is handled by the active editor's context menu rather than as a global Electron shortcut. Use the **File → Save** navbar menu item or the `Ctrl+Shift+S` Save As shortcut to save from the keyboard.
+</Note>
+
+### Window Management (Electron only)
+
+| Action | Shortcut |
+|---|:---:|
+| Open new Mixly window | `Ctrl+Shift+N` / `Cmd+Shift+N` |
+| Minimise window | `Ctrl+M` / `Cmd+M` |
+| Close window | `Ctrl+W` / `Cmd+W` |
+| Restart application | `Ctrl+Q` / `Cmd+Q` |
+| Reload board package | `Ctrl+R` / `Cmd+R` |
+| Hard reload (full page) | `Ctrl+Shift+R` / `Cmd+Shift+R` |
+| Toggle developer tools | `Ctrl+Shift+I` / `Cmd+Shift+I` |
+
+### Zoom
+
+| Action | Shortcut |
+|---|:---:|
+| Zoom in | `Ctrl+Shift+=` / `Cmd+Shift+=` |
+| Zoom out | `Ctrl+Shift+-` / `Cmd+Shift+-` |
+| Reset zoom to 100 % | `Ctrl+0` / `Cmd+0` |
+
+### Serial Monitor / Status Bar
+
+| Action | Shortcut |
+|---|:---:|
+| Increase font size | `Ctrl+=` or `Ctrl++` |
+| Decrease font size | `Ctrl+-` |
+| Send Ctrl+C to device | `Ctrl+Shift+C` |
+| Send Ctrl+D to device | `Ctrl+Shift+D` |
+| Clear status bar output | `Ctrl+E` |
+
+### Code Editor (Monaco)
+
+| Action | Shortcut |
+|---|:---:|
+| Toggle line comment | `Ctrl+/` |
+| Toggle block comment | `Shift+Alt+A` |
+| Cut | `Ctrl+X` |
+| Copy | `Ctrl+C` |
+| Paste | `Ctrl+V` |
+| Undo | `Ctrl+Z` |
+| Redo | `Ctrl+Y` |
+
+---
+
+## Supported File Types Summary
+
+| Extension | Open | Save | Description |
+|---|:---:|:---:|---|
+| `.mix` | ✓ | ✓ | Mixly project (XML + config + code) |
+| `.xml` | ✓ | — | Legacy Mixly 1.x project format |
+| `.py` | ✓ | ✓ | MicroPython / Python source file |
+| `.ino` | ✓ | ✓ | Arduino sketch source file |
+| `.hex` | ✓ | ✓ (board) | Compiled firmware hex (micro:bit) |
+| `.bin` | ✓ | ✓ (board) | Compiled firmware binary (ESP boards) |
+| `.mil` | — | ✓ (board) | Mixly library block export |
+
+Boards control which save/open types are available via their `nav.save` and `nav.upload` configuration keys in their board package JSON. The default for all boards is `.mix`.

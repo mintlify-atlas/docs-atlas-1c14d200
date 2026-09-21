@@ -1,0 +1,327 @@
+---
+title: "Creating a Custom Board Package for Mixly"
+sidebarTitle: "Custom Boards"
+description: "Learn how to structure, configure, and register a custom board package in Mixly, from boards.json entry and config.json fields to blocks, generators, and toolbox XML."
+---
+
+Every board in Mixly — from the Arduino AVR family to MicroPython ESP32 variants — is delivered as a self-contained **board package**: a directory of JavaScript modules, a Blockly toolbox definition, board configuration, and optional media assets. This page walks through exactly how a board package is laid out, what each configuration field does, and how to register your own board so it appears in the IDE's board selector.
+
+## Board package layout
+
+A built board package lives under `boards/default/<board_name>/`. The source you develop and build from lives under `boards/default_src/<board_name>/`. After running `npm run build:prod` from the source directory, the compiled output lands in the corresponding `boards/default/` folder.
+
+```
+boards/default/<board_name>/
+├── config.json         # Board capabilities, upload commands, nav options, libs
+├── index.xml           # Compiled Blockly toolbox (categories + block entries)
+├── main.bundle.js      # Webpack-compiled blocks + generators bundle
+├── media/              # Board images (referenced by boards.json)
+├── examples/           # Sample .mix project files
+└── styles/             # Optional CSS injected into the workspace
+```
+
+The source tree (`boards/default_src/<board_name>/`) adds the pre-build inputs:
+
+```
+boards/default_src/<board_name>/
+├── package.json        # npm package (build scripts, name, version)
+├── webpack.prod.js     # Webpack production config
+├── template.xml        # EJS template that becomes index.xml after build
+├── export.js           # Re-exports all block + generator modules
+├── index.js            # Entry point — registers everything with Blockly
+├── blocks/             # Block definition files (one per category)
+├── generators/         # Code generator files (one per category)
+├── pins/               # Pin profile definitions (Profile.default)
+└── media/              # Source images
+```
+
+## Entry in boards.json
+
+Each board the IDE exposes is declared as an object in `boards.json` at the repo root. The fields used by all built-in boards are:
+
+| Field | Type | Description |
+|---|---|---|
+| `boardType` | `string` | Display name shown in the board selector |
+| `boardImg` | `string` | Relative path to the board image (PNG) |
+| `boardIndex` | `string` | Relative path to the compiled `index.xml` toolbox file |
+| `language` | `string` | `"C/C++"`, `"MicroPython"`, or `"Python"` |
+| `env.electron` | `boolean` | Whether the board is available in the desktop app |
+| `env.web` | `boolean` | Whether the board is available in browser/WebSerial mode |
+| `env.webCompiler` | `boolean` | Whether cloud compilation is supported |
+| `env.webSocket` | `boolean` | Whether WebSocket-based upload is supported |
+
+An example entry for a hypothetical custom ESP32 board:
+
+```json
+{
+    "boardImg": "./boards/default/my_esp32_board/media/board.png",
+    "boardType": "My ESP32 Board",
+    "boardIndex": "./boards/default/my_esp32_board/index.xml",
+    "env": {
+        "electron": true,
+        "web": true,
+        "webCompiler": true,
+        "webSocket": true
+    },
+    "language": "C/C++"
+}
+```
+
+## config.json reference
+
+`config.json` is the most important file in a built board package. It controls upload behaviour, which toolbar buttons appear, serial monitor defaults, and library sources. Below is an annotated breakdown based on the `arduino_avr` and `micropython_esp32s2` packages.
+
+<Accordion title="board — sub-board variants">
+
+The `board` object maps human-readable variant names to their Arduino/MicroPython FQBN (fully-qualified board name) keys. A variant can be a plain string or an object with optional `config` array for user-selectable options (such as processor variant or flash mode).
+
+```json
+"board": {
+    "Arduino/Genuino Uno": {
+        "key": "arduino:avr:uno",
+        "config": []
+    },
+    "Arduino Nano": {
+        "key": "arduino:avr:nano",
+        "config": [
+            {
+                "label": "Processor",
+                "key": "cpu",
+                "options": [
+                    { "key": "atmega328old", "label": "ATmega328P (Old Bootloader)" },
+                    { "key": "atmega328",    "label": "ATmega328P" },
+                    { "key": "atmega168",    "label": "ATmega168" }
+                ]
+            }
+        ]
+    },
+    "Arduino Leonardo": "arduino:avr:leonardo"
+}
+```
+
+Each `config` entry becomes a dropdown in the board settings panel. The selected option key is substituted into upload commands.
+</Accordion>
+
+<Accordion title="burn — firmware flash command">
+
+For MicroPython boards, `burn` is an object with a `type` (`"command"`), a `portSelect` mode (`"all"` means all detected serial ports are offered), and per-variant command strings. Template variables like `{esptool}`, `{com}`, and `{indexPath}` are expanded at runtime.
+
+```json
+"burn": {
+    "type": "command",
+    "portSelect": "all",
+    "micropython:esp32s2:mixgo_ce": {
+        "command": "\"{esptool}\" --chip esp32s2 --port {com} --baud 460800 erase_flash && \"{esptool}\" --chip esp32s2 --port {com} --baud 460800 write_flash 0x1000 \"{indexPath}/build/firmware.bin\""
+    }
+}
+```
+
+For Arduino (AVR/ESP32/ESP8266) boards `burn` is set to `"None"` because the Arduino CLI handles compilation and upload via the `upload` section.
+</Accordion>
+
+<Accordion title="upload — code upload settings">
+
+The `upload` object controls how compiled code or Python scripts are transferred to the device.
+
+```json
+"upload": {
+    "portSelect": "all"
+}
+```
+
+For MicroPython packages the upload object is richer — it includes a `command` (running `ampy`), a `filePath` pointing to the compiled `main.py`, `libPath` arrays, and a `copyLib` flag.
+</Accordion>
+
+<Accordion title="nav — toolbar visibility">
+
+`nav` controls which buttons appear in the Mixly toolbar for this board. All fields are booleans or sub-objects.
+
+```json
+"nav": {
+    "compile": true,
+    "upload": true,
+    "save": {
+        "ino": true,
+        "hex": true
+    },
+    "setting": {
+        "thirdPartyLibrary": true,
+        "wiki": true
+    }
+}
+```
+
+MicroPython boards set `"burn": true` in place of `"compile"`, and `"save": { "py": true }`.
+</Accordion>
+
+<Accordion title="serial — serial monitor defaults">
+
+```json
+"serial": {
+    "ctrlCBtn": false,
+    "ctrlDBtn": false,
+    "baudRates": 9600,
+    "yMax": 100,
+    "yMin": 0,
+    "pointNum": 100,
+    "rts": true,
+    "dtr": true
+}
+```
+
+`ctrlCBtn` and `ctrlDBtn` add MicroPython REPL control buttons when `true`. `yMax`/`yMin`/`pointNum` configure the serial plotter.
+</Accordion>
+
+<Accordion title="lib — library sources">
+
+```json
+"lib": {
+    "mixly": {
+        "url": [
+            "http://download.mixlylibs.cloud/mixly-packages/cloud-libs/arduino_avr/libs.json"
+        ]
+    }
+}
+```
+
+Each URL points to a `libs.json` manifest that the library manager fetches to populate the available library list.
+</Accordion>
+
+<Accordion title="web — browser/WebSerial overrides">
+
+The `web` object provides overrides specific to the web (browser) runtime, including the connection type (`"com": "serial"`) and web-specific burn/upload configuration with binary file offsets.
+</Accordion>
+
+## Steps to create a new board package
+
+<Steps>
+  <Step title="Create the source directory">
+    Copy an existing board from `boards/default_src/` that uses the same language runtime as your target (e.g., copy `arduino_avr` for a new AVR-compatible board or `micropython_esp32s2` for a MicroPython board).
+
+    ```
+    cp -r boards/default_src/arduino_avr boards/default_src/my_custom_board
+    ```
+  </Step>
+
+  <Step title="Update package.json">
+    Edit `boards/default_src/my_custom_board/package.json` to set the package `name`, `version`, and `description`. The `main` field must point to `./export.js`.
+
+    ```json
+    {
+        "name": "@mixly/my-custom-board",
+        "version": "1.0.0",
+        "description": "Custom board package for My Board",
+        "main": "./export.js",
+        "scripts": {
+            "build:prod": "webpack --config=webpack.prod.js"
+        }
+    }
+    ```
+  </Step>
+
+  <Step title="Define your pin profile">
+    Edit `pins/pins.js` to export a profile object with `digital`, `analog`, and `pwm` pin arrays that match your hardware. These arrays are consumed by block definitions via `Profile.default`.
+  </Step>
+
+  <Step title="Write blocks and generators">
+    Create your block definition files in `blocks/` and matching generator files in `generators/`. See [Block Definitions](./block-definitions) and [Code Generators](./code-generators) for the exact API patterns used in the project.
+  </Step>
+
+  <Step title="Register blocks in index.js">
+    In `index.js`, import all block and generator modules and assign them to `Blockly.Blocks` and `Blockly.Arduino.forBlock` (or the appropriate generator namespace for your language). This is the entry point Webpack compiles into `main.bundle.js`.
+  </Step>
+
+  <Step title="Define the toolbox in template.xml">
+    Edit `template.xml` to list every block type in the Blockly XML toolbox format, grouped into `<category>` elements with a `colour` attribute. The template is processed by Webpack's `html-webpack-plugin` to produce the final `index.xml`.
+
+    ```xml
+    <xml>
+      <category name="" id="catInOut" colour="20">
+        <block type="my_board_digital_write">
+          <value name="PIN">
+            <shadow type="pins_digital"></shadow>
+          </value>
+        </block>
+      </category>
+    </xml>
+    ```
+  </Step>
+
+  <Step title="Build the package">
+    Run the production build from inside the board source directory:
+
+    ```bash
+    cd boards/default_src/my_custom_board
+    npm install
+    npm run build:prod
+    ```
+
+    The compiled output lands in `boards/default/my_custom_board/`.
+  </Step>
+
+  <Step title="Add a config.json to the output directory">
+    Create `boards/default/my_custom_board/config.json` with at least the `board`, `language`, `burn`, `upload`, `nav`, `serial`, and `lib` fields. Start from the minimal template below and expand as needed.
+
+    ```json
+    {
+        "board": {
+            "My Board v1": "myvendor:myarch:myboard"
+        },
+        "language": "C/C++",
+        "burn": "None",
+        "upload": {
+            "portSelect": "all"
+        },
+        "nav": {
+            "compile": true,
+            "upload": true,
+            "save": { "ino": true }
+        },
+        "serial": {
+            "ctrlCBtn": false,
+            "ctrlDBtn": false,
+            "baudRates": 9600,
+            "yMax": 100,
+            "yMin": 0,
+            "pointNum": 100,
+            "rts": true,
+            "dtr": true
+        },
+        "lib": {
+            "mixly": {
+                "url": []
+            }
+        }
+    }
+    ```
+  </Step>
+
+  <Step title="Register in boards.json">
+    Add a new entry to `boards.json` at the repo root. Point `boardIndex` at the compiled `index.xml` inside the output directory and `boardImg` at your board image.
+
+    ```json
+    {
+        "boardImg": "./boards/default/my_custom_board/media/board.png",
+        "boardType": "My Custom Board",
+        "boardIndex": "./boards/default/my_custom_board/index.xml",
+        "env": {
+            "electron": true,
+            "web": false,
+            "webCompiler": false,
+            "webSocket": false
+        },
+        "language": "C/C++"
+    }
+    ```
+
+    Restart the IDE and your board will appear in the board selector.
+  </Step>
+</Steps>
+
+<Note>
+The `boards/default_src/` directory also contains a shared `@mixly/arduino` package that exports common blocks (text manipulation, Ethernet, procedures, variables) and the `Arduino` generator instance. Your custom Arduino-family board can import from this shared package instead of reimplementing those blocks from scratch.
+</Note>
+
+<Tip>
+To bulk-build all board packages at once, run `node scripts/build-boards.js -t all` from the repo root. Pass `-t arduino`, `-t micropython`, or `-t python` to build only boards of that language family.
+</Tip>

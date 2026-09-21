@@ -1,0 +1,337 @@
+---
+title: "Mixly npm Build Scripts and Commands Reference"
+sidebarTitle: "Build Scripts"
+description: "Complete reference for every npm script in Mixly's package.json — board bundle compilation, dependency graph generation, example maps, and board publishing."
+---
+
+Mixly's build pipeline is driven by a small set of Node.js scripts invoked through npm. These scripts handle everything from generating the Google Closure dependency graph used by the module loader, to running Webpack to compile individual board packages into production JS bundles, to scanning example directories and producing the `map.json` index files the IDE consumes at runtime. All scripts live under `scripts/` in the repository root and are wired up in `package.json`.
+
+## Script overview
+
+| npm command | Script file | What it does |
+|---|---|---|
+| `npm run static` | `static-server/server.js` | Starts HTTP (port 7000) + HTTPS (port 8000) static servers |
+| `npm run deps` | `scripts/deps-gen.js` | Scans JS source trees and writes `deps.json` files |
+| `npm run build:boards:all` | `scripts/build-boards.js --type all` | Webpack-builds every board package |
+| `npm run build:boards:arduino` | `scripts/build-boards.js --type arduino` | Webpack-builds Arduino board packages only |
+| `npm run build:boards:micropython` | `scripts/build-boards.js --type micropython` | Webpack-builds MicroPython board packages only |
+| `npm run build:boards:python` | `scripts/build-boards.js --type python` | Webpack-builds Python board packages only |
+| `npm run publish:boards:all` | `scripts/publish-boards.js --type all` | Publishes every board package to npm |
+| `npm run publish:boards:arduino` | `scripts/publish-boards.js --type arduino` | Publishes Arduino board packages to npm |
+| `npm run publish:boards:micropython` | `scripts/publish-boards.js --type micropython` | Publishes MicroPython board packages to npm |
+| `npm run publish:boards:python` | `scripts/publish-boards.js --type python` | Publishes Python board packages to npm |
+| `npm run build:examples` | `scripts/build-examples.js -t all` | Scans example directories and writes `map.json` indexes |
+| `npm start` / `npm test` | — | Runs `npm run deps` then `npm run static` |
+
+---
+
+## `npm run deps` — dependency graph generation
+
+The `deps` script calls `scripts/deps-gen.js`, which walks two module source trees and writes a `deps.json` file into each one:
+
+- `mixly-sw/mixly-modules/`
+- `common/modules/mixly-modules/`
+
+`deps-gen.js` delegates the actual scanning to `scripts/build-deps.js`. That helper recursively walks a directory tree, opens every JS file it finds, and uses regex to extract `goog.provide` and `goog.require` calls — the Google Closure-style module declarations that Mixly uses for its own module system. The output is an array of objects mapping each file's repo-relative path to its `provide` and `require` arrays.
+
+```js
+// Example entry in a generated deps.json
+[
+  {
+    "path": "/common/editor/editor.js",
+    "require": ["Mixly.Env"],
+    "provide": ["Mixly.Editor"]
+  },
+  ...
+]
+```
+
+One file is explicitly excluded from scanning regardless of the directory walk:
+
+```
+common/modules/mixly-modules/mixly.min.js
+```
+
+<Note>
+  Run `npm run deps` any time you add, rename, or remove a JS file that contains `goog.provide` or `goog.require`. The IDE's module loader reads `deps.json` at startup to resolve the load order of lazy-loaded modules.
+</Note>
+
+<CodeGroup>
+```bash npm
+npm run deps
+```
+```bash yarn
+yarn deps
+```
+</CodeGroup>
+
+---
+
+## `npm run build:boards:*` — board bundle compilation
+
+The `build-boards.js` script iterates over `boards/default_src/`, filters by board type, enters each board's subdirectory, and runs `npm run build:prod` inside it.
+
+### `--type` flag
+
+The script accepts a `-t` / `--type` option that matches the first segment of each board directory name (the part before the first underscore):
+
+| `--type` value | Directories built |
+|---|---|
+| `all` | All directories under `boards/default_src/` |
+| `arduino` | `arduino`, `arduino_avr`, `arduino_esp32`, `arduino_esp8266` |
+| `micropython` | `micropython`, `micropython_esp32`, `micropython_esp32c2`, `micropython_esp32c3`, `micropython_esp32s2`, `micropython_esp32s3`, `micropython_k210_mixgoai`, `micropython_nrf51822_microbit`, `micropython_nrf51822_mithoncc`, `micropython_robot` |
+| `python` | `python`, `python_mixpy`, `python_skulpt`, `python_skulpt_car`, `python_skulpt_mixtoy` |
+
+A board directory is skipped if it does not contain a `package.json` file. For every matching directory the script shell-changes into that directory and invokes `npm run build:prod`.
+
+<CodeGroup>
+```bash npm
+# Build everything
+npm run build:boards:all
+
+# Arduino boards only
+npm run build:boards:arduino
+
+# MicroPython boards only
+npm run build:boards:micropython
+
+# Python boards only
+npm run build:boards:python
+```
+```bash yarn
+yarn build:boards:all
+yarn build:boards:arduino
+yarn build:boards:micropython
+yarn build:boards:python
+```
+</CodeGroup>
+
+### Board-level build output
+
+When `npm run build:prod` runs inside a board directory (e.g., `boards/default_src/arduino_avr/`), Webpack writes its output to the corresponding `boards/default/` sibling directory. The output path is computed dynamically in `webpack.common.js`:
+
+```js
+const DEST_DIR = path.resolve(ORI_DIR, '../../default', path.basename(ORI_DIR));
+```
+
+So `boards/default_src/arduino_avr/` → `boards/default/arduino_avr/`.
+
+Each board's `origin/` subdirectory is also copied verbatim into the output directory via `CopyPlugin`, providing static assets (config, examples, media, wiki pages) that are not processed by Webpack.
+
+---
+
+## Webpack configuration
+
+Mixly uses a three-file Webpack configuration split at the repository root and mirrored inside each board package. The root files are used as base configuration for all board-level builds.
+
+### `webpack.common.js` — shared configuration
+
+All board builds extend this common config:
+
+```js
+// webpack.common.js (root)
+const DEST_DIR = path.resolve(ORI_DIR, '../../default', path.basename(ORI_DIR));
+
+module.exports = {
+    cache: false,
+    entry: path.resolve(ORI_DIR, 'index.js'),
+    output: {
+        filename: "[name].bundle.js",
+        path: DEST_DIR,
+        clean: true
+    },
+    // ...
+    externals: {
+        'blockly/core': 'Blockly',
+        'mixly': 'Mixly',
+        'layui': 'layui',
+        'path': 'path',
+        'xscrollbar': 'XScrollbar',
+        'jquery': '$',
+        'ace': 'ace'
+    }
+};
+```
+
+Key points:
+- **Entry point** is each board's `index.js`
+- **Output** is `[name].bundle.js` in the target `boards/default/<board>/` directory
+- **Images** up to 64 KB are inlined as data URLs; larger images are emitted to `images/[name]_[hash:8][ext]`
+- **CSS** is extracted to `styles/[name].[hash:8].css` via `MiniCssExtractPlugin`
+- **Externals** (`Blockly`, `Mixly`, `layui`, `$`, `ace`, etc.) are not bundled — they are provided by the host page at runtime
+
+Each board's own `webpack.common.js` extends the root config and may add board-specific `resolve.alias` entries:
+
+```js
+// boards/default_src/arduino_avr/webpack.common.js
+module.exports = merge(common, {
+    resolve: {
+        alias: {
+            '@mixly/arduino': path.resolve(__dirname, '../arduino')
+        }
+    }
+});
+```
+
+### `webpack.dev.js` — development builds
+
+```js
+// webpack.dev.js (root)
+module.exports = merge(common, {
+    mode: "development",
+    devtool: 'source-map',
+    plugins: [
+        new ESLintPlugin({ context: process.cwd() }),
+        new HtmlWebpackPlugin({
+            inject: false,
+            template: path.resolve(process.cwd(), 'template.xml'),
+            filename: 'index.xml',
+            minify: false
+        }),
+    ]
+});
+```
+
+Development builds include:
+- Full **source maps** (`devtool: 'source-map'`)
+- **ESLint** static analysis on every build
+- Unminified `index.xml` output generated from `template.xml`
+
+### `webpack.prod.js` — production builds
+
+```js
+// webpack.prod.js (root)
+module.exports = merge(common, {
+    mode: "production",
+    optimization: {
+        minimize: true,
+        minimizer: [
+            new TerserPlugin({ extractComments: false }),
+            new HtmlWebpackPlugin({
+                inject: false,
+                template: path.resolve(process.cwd(), 'template.xml'),
+                filename: 'index.xml',
+                minify: {
+                    removeAttributeQuotes: true,
+                    collapseWhitespace: true,
+                    removeComments: true,
+                }
+            })
+        ]
+    }
+});
+```
+
+Production builds:
+- Minify JS with **Terser** (no separate `*.LICENSE.txt` files — `extractComments: false`)
+- Minify the generated `index.xml` (strip quotes, whitespace, and comments)
+- Do **not** include source maps
+
+<Tip>
+  To build a single board package in development mode with source maps, `cd` into its source directory and run `npm run build:dev` directly. The `build:boards:*` scripts always run `build:prod`.
+</Tip>
+
+---
+
+## `npm run build:examples` — example index generation
+
+The `build-examples.js` script scans the `examples/` subdirectories inside every board package and produces `map.json` index files that the IDE uses to populate the Examples menu.
+
+### How it works
+
+The script runs in two passes:
+
+1. **Source pass** — reads `boards/default_src/<board>/origin/examples/` and writes `map.json` using the original human-readable filenames.
+2. **Built pass** — reads `boards/default/<board>/examples/` and writes `map.json` using SHA-256 hashed filenames, renaming the `.mix` files in place at the same time.
+
+Only `.mix` files are indexed. Directories that contain no `.mix` files (even transitively) are omitted from the output. Each entry carries `__file__` (boolean), `__name__` (original display name), and nested children for subdirectories.
+
+```json
+// Example map.json structure
+{
+  "a3f2...": {
+    "__file__": false,
+    "__name__": "Basics",
+    "b7c1....mix": {
+      "__file__": true,
+      "__name__": "Blink.mix"
+    }
+  }
+}
+```
+
+### `--type` / `-t` flag
+
+The script accepts `-t all` (default) or `-t special`. When run as `npm run build:examples` from the repo root, `-t all` processes every board directory. When invoked as `npm run build:examples` from inside a single board directory (`-t special`), it resolves the board name from `process.cwd()` and processes only that board.
+
+<CodeGroup>
+```bash npm
+# Build example maps for all boards
+npm run build:examples
+```
+```bash yarn
+yarn build:examples
+```
+</CodeGroup>
+
+---
+
+## `npm run publish:boards:*` — publishing to npm
+
+The `publish-boards.js` script mirrors the structure of `build-boards.js` exactly — it uses the same `--type` filter logic — but instead of running `npm run build:prod` it runs `npm run publish:board` inside each matching board directory. Each board's `publish:board` script is:
+
+```bash
+npm publish --registry https://registry.npmjs.org/
+```
+
+Board packages are published under the `@mixly/` npm scope with `"access": "public"`.
+
+<Warning>
+  Publishing requires that you are authenticated with npm (`npm login`) and have publish access to the `@mixly/` scope. Run `npm run build:boards:*` and `npm run build:examples` before publishing to ensure all bundles and example maps are up to date.
+</Warning>
+
+<CodeGroup>
+```bash npm
+# Publish all board packages
+npm run publish:boards:all
+
+# Publish only Arduino boards
+npm run publish:boards:arduino
+
+# Publish only MicroPython boards
+npm run publish:boards:micropython
+
+# Publish only Python boards
+npm run publish:boards:python
+```
+```bash yarn
+yarn publish:boards:all
+yarn publish:boards:arduino
+```
+</CodeGroup>
+
+---
+
+## `npm start` — combined startup shortcut
+
+`npm start` is aliased to `npm test`, which chains `deps` and `static` together:
+
+```json
+"start": "npm run test",
+"test":  "npm run deps && npm run static"
+```
+
+This means a single `npm start` from the repository root will:
+1. Regenerate all `deps.json` dependency graphs
+2. Start both the HTTP and HTTPS static servers
+
+Use this as your day-to-day development entry point when working on the web mode of Mixly.
+
+<CodeGroup>
+```bash npm
+npm start
+```
+```bash yarn
+yarn start
+```
+</CodeGroup>

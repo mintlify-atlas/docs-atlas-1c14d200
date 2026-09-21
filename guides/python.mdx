@@ -1,0 +1,177 @@
+---
+title: "Python Programming Modes in Mixly IDE"
+sidebarTitle: "Python"
+description: "Run Python 3 programs in-browser with Skulpt (no hardware needed) or execute them locally with a system Python 3 interpreter via the Python 3 board profile."
+---
+
+Mixly offers two distinct Python programming modes that cater to different use cases. The browser-based **Python 3 Lite** mode runs code entirely inside the web page using the Skulpt compiler — no serial port, no Python installation, no hardware required. The desktop-only **Python 3** mode calls the real Python 3 interpreter installed on your computer, giving you access to the full standard library and any third-party packages. Both modes share the same drag-and-drop block interface and generate identical Python 3 source code.
+
+## Choosing a Python Mode
+
+| Feature | Python 3 Lite (Skulpt) | Python 3 (local) |
+|---|---|---|
+| **Board name in Mixly** | `Python 3 Lite` | `Python 3` |
+| **Board type key** | `python_skulpt` | `python_mixpy` |
+| **Runs in browser** | ✅ Yes | ❌ No (Electron only) |
+| **Hardware required** | ❌ No | ❌ No |
+| **Real Python 3** | ❌ (Skulpt subset) | ✅ Full CPython |
+| **Third-party packages** | Limited (bundled) | All pip packages |
+| **Output panel** | Status bar Output tab | Status bar Output tab |
+| **Language** | Python | Python |
+
+## Python 3 Lite — In-Browser Execution with Skulpt
+
+Python 3 Lite uses **Skulpt**, a JavaScript implementation of Python, to compile and run Python code directly inside the browser. There is no need to install anything — it works in the Electron desktop app as well as in modern Chromium browsers.
+
+### How it Works
+
+When you click **Run**, Mixly passes the generated Python code to the Skulpt runtime. Skulpt compiles it to JavaScript and executes it in the page's sandbox. Output from `print()` appears in the status bar Output tab in real time.
+
+Because Skulpt implements a subset of CPython, the following apply:
+- Standard library modules that have a Skulpt implementation work (`math`, `random`, `time`, `turtle`, `json`, etc.)
+- Modules that depend on native C extensions are not available
+- The `turtle` module is fully supported — a canvas renders directly in the Mixly workspace
+- IoT and data-visualization blocks (`matplotlib`-style charts, numpy arrays) use the bundled Skulpt equivalents
+
+### Example — Hello World in Python 3 Lite
+
+Drag an **inout → print** block and type `"Hello, Mixly!"` into the text field. The generated code:
+
+```python
+print('Hello, Mixly!')
+```
+
+Click **Run**. The Output tab shows:
+```
+Hello, Mixly!
+```
+
+No board, no serial port, no extra setup.
+
+### Turtle Graphics
+
+The Python 3 Lite toolbox includes a full **Turtle** category. Turtle graphics render in an embedded canvas panel inside Mixly. Example with blocks:
+
+```python
+import turtle
+tina = turtle.Turtle()
+tina.forward(100)
+tina.left(90)
+tina.forward(100)
+```
+
+### Block Categories Available
+
+The Python 3 Lite toolbox includes: I/O (print, input), Control, Math, Logic, Text, Variables, Lists, Tuples, Dicts, Sets, Functions, Turtle graphics, Data (charts/arrays), IoT (MixIO/MQTT), and Algorithm teaching blocks.
+
+## Python 3 — Local Interpreter Execution
+
+The **Python 3** board profile (`python_mixpy`) requires the Electron desktop app and a Python 3 installation on the host machine. When you click **Run**, Mixly saves the generated code to a temporary file and invokes the Python 3 binary as a subprocess. Standard output and standard error stream into the status bar Output tab.
+
+<Note>
+  The Python 3 board is listed with `"electron": true` and `"web": false` in `boards.json`. It cannot be used in the browser-only web mode.
+</Note>
+
+### Configuring the Python 3 Path
+
+Mixly reads the Python interpreter path from `sw-config.json` in the application root. By default, both values are `"None"`, which means Mixly attempts to auto-detect Python 3 from the system `PATH`.
+
+```json
+{
+  "defaultPath": {
+    "win32":  { "python3": "None" },
+    "darwin": { "python3": "None" },
+    "linux":  { "python3": "None" }
+  }
+}
+```
+
+To pin a specific interpreter, replace `"None"` with the full path:
+
+<CodeGroup>
+```json Windows
+{
+  "defaultPath": {
+    "win32": { "python3": "C:\\Python311\\python.exe" }
+  }
+}
+```
+```json macOS
+{
+  "defaultPath": {
+    "darwin": { "python3": "/usr/local/bin/python3" }
+  }
+}
+```
+```json Linux
+{
+  "defaultPath": {
+    "linux": { "python3": "/usr/bin/python3" }
+  }
+}
+```
+</CodeGroup>
+
+<Tip>
+  On macOS, Mixly uses `which python3` to auto-detect the interpreter path if `sw-config.json` is set to `"None"`. Make sure `python3` is on your `PATH`.
+</Tip>
+
+### Example — Reading a File with Python 3
+
+This example uses the real Python 3 stdlib and would not run in Skulpt mode:
+
+```python
+import os
+
+files = os.listdir('.')
+for f in files:
+    print(f)
+```
+
+Drag the corresponding blocks from the **Storage** and **Control** categories, or switch to the code editor and type the code directly. Click **Run**; the file listing appears in the Output tab.
+
+### Running Third-Party Packages
+
+Because the Python 3 board uses the system interpreter, any package installed with `pip` is available:
+
+```python
+import requests
+
+response = requests.get('https://api.example.com/data')
+print(response.json())
+```
+
+Install the package first from a terminal (`pip install requests`), then run the program from Mixly normally.
+
+## Side-by-Side Comparison
+
+<Tabs>
+  <Tab title="Python 3 Lite (Skulpt)">
+    **Best for:** Teaching, quick experiments, classrooms, browser-based deployment.
+
+    **Run button behavior:** Skulpt compiles the code in-page, result appears instantly in the Output tab.
+
+    **Supported environments:** Electron desktop + browser (Chrome/Edge with WebSerial).
+
+    **Example:**
+    ```python
+    import math
+    print(math.sqrt(144))
+    # Output: 12.0
+    ```
+  </Tab>
+  <Tab title="Python 3 (local)">
+    **Best for:** Data science, file I/O, network requests, anything requiring CPython or pip packages.
+
+    **Run button behavior:** Mixly spawns a subprocess: `python3 /tmp/mixly_code.py`. Output streams back over stdout/stderr.
+
+    **Supported environments:** Electron desktop only.
+
+    **Example:**
+    ```python
+    import sys
+    print(f"Python {sys.version}")
+    # Output: Python 3.11.x (...)
+    ```
+  </Tab>
+</Tabs>

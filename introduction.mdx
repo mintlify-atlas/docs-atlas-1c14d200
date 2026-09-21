@@ -1,0 +1,111 @@
+---
+title: "Mixly 3.0: Visual Block Programming IDE for Hardware"
+sidebarTitle: "Introduction"
+description: "Mixly is a Blockly-based graphical programming IDE running as an Electron desktop app or in Chromium, supporting Arduino, MicroPython, and Python boards."
+---
+
+Mixly is a graphical programming environment built on top of Google Blockly, designed for beginners and hardware enthusiasts who want to write firmware for microcontrollers without hand-coding every line. You drag and snap blocks together on a canvas, and Mixly continuously generates the corresponding C/C++ or Python source code in a side panel — no compile step needed to see what your program looks like. When you are ready, you click Upload and Mixly drives the toolchain for you.
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="bolt" href="/quickstart">
+    Build and upload an LED blink program in under 5 minutes, no prior setup required.
+  </Card>
+  <Card title="Installation" icon="download" href="/installation">
+    Install the Electron desktop app or run the local web server on Windows, macOS, or Linux.
+  </Card>
+</CardGroup>
+
+## Deployment modes
+
+Mixly 3.0 ships in two forms that share the same codebase and block libraries.
+
+<CardGroup cols={2}>
+  <Card title="Electron Desktop App" icon="desktop">
+    A self-contained Electron application that bundles Node.js, the Arduino CLI, and Python runtimes. Supports all boards including Arduino AVR, ESP32, and ESP8266. Serial port access is handled natively through the OS, and USB hot-plug events are detected automatically via `usb-detection`.
+  </Card>
+  <Card title="Web Browser (Chromium)" icon="globe">
+    Runs entirely in a modern Chromium browser using the WebSerial API. No installation is required — navigate to the local Express static server (HTTP on port 7000, HTTPS on port 8000) or a hosted instance and start programming. Some boards are limited to web-compiler or WebSocket upload modes in this environment.
+  </Card>
+</CardGroup>
+
+## Supported boards
+
+Mixly 3.0 ships with the following board packages out of the box. Each board entry declares which environments it supports (`electron`, `web`, `webCompiler`, `webSocket`).
+
+<CardGroup cols={3}>
+  <Card title="MixGo CE" icon="microchip">
+    MicroPython on ESP32-S2. Supports Electron, Web, web compiler, and WebSocket upload.
+  </Card>
+  <Card title="Python ESP32-S3" icon="microchip">
+    MicroPython on ESP32-S3. Full environment support including web mode.
+  </Card>
+  <Card title="Python ESP32-C3" icon="microchip">
+    MicroPython on ESP32-C3. Full environment support including web mode.
+  </Card>
+  <Card title="Python Robot" icon="robot">
+    MicroPython targeting the MixBot robot platform. Full environment support.
+  </Card>
+  <Card title="Python ESP32" icon="microchip">
+    MicroPython on standard ESP32. Full environment support including web mode.
+  </Card>
+  <Card title="Python ESP32-C2" icon="microchip">
+    MicroPython on ESP32-C2. Full environment support including web mode.
+  </Card>
+  <Card title="Arduino AVR" icon="bolt">
+    C/C++ for AVR-based boards (Uno, Nano, Mega, etc.). Electron and web-compiler mode; direct WebSerial upload not supported.
+  </Card>
+  <Card title="Python 3" icon="code">
+    Desktop Python 3 via the bundled MixPy runtime. Electron only — no web or compiler mode.
+  </Card>
+  <Card title="Python 3 Lite" icon="code">
+    In-browser Python 3 powered by Skulpt. Full environment support including web mode.
+  </Card>
+  <Card title="MixGo AI" icon="brain">
+    MicroPython on Kendryte K210 for the MixGo AI board. Full environment support.
+  </Card>
+  <Card title="Arduino ESP8266" icon="wifi">
+    C/C++ for ESP8266. Electron and web-compiler mode; direct WebSerial upload not supported.
+  </Card>
+  <Card title="Arduino ESP32" icon="wifi">
+    C/C++ for ESP32. Electron and web-compiler mode; direct WebSerial upload not supported.
+  </Card>
+</CardGroup>
+
+## Key features
+
+<CardGroup cols={3}>
+  <Card title="Live Code Preview" icon="eye">
+    The code panel updates in real time as you drag and configure blocks. C/C++ and Python output is syntax-highlighted using the Ace editor.
+  </Card>
+  <Card title="Light & Dark Themes" icon="moon">
+    Switch between a light theme (Blockly Classic + Xcode editor) and a dark theme (Blockly Dark + Dracula editor). The theme also follows the OS `prefers-color-scheme` media query automatically.
+  </Card>
+  <Card title="Multi-language UI" icon="language">
+    The interface ships in Simplified Chinese (`zh-hans`), Traditional Chinese (`zh-hant`), and English (`en`). The language is auto-detected from `navigator.language` but can be changed manually in settings.
+  </Card>
+  <Card title="Block Toolbox Search" icon="magnifying-glass">
+    A built-in toolbox searcher lets you find any block by keyword without scrolling through category trees.
+  </Card>
+  <Card title="Serial Monitor & Plotter" icon="chart-line">
+    An integrated serial output panel and chart view lets you read sensor data directly inside the IDE after uploading — no separate terminal needed.
+  </Card>
+  <Card title="Library & Board Manager" icon="box-open">
+    Download and manage Arduino libraries and third-party board packages from within the IDE. Board definitions are fetched from the Mixly cloud board registry.
+  </Card>
+</CardGroup>
+
+## Language support
+
+| UI Language | Code (`language` value) | Auto-detected from |
+|---|---|---|
+| English | `en` | Any locale not matching Chinese |
+| Simplified Chinese | `zh-hans` | `zh-CN` |
+| Traditional Chinese | `zh-hant` | `zh-HK`, `zh-SG`, `zh-TW` |
+
+<Note>
+  The default language at first launch is Simplified Chinese (`zh-hans`). You can change it in the user settings panel inside the IDE.
+</Note>
+
+## Open source & license
+
+Mixly is licensed under the **MIT License**. The official website is [mixly.org](http://mixly.org) and community wiki documentation is available at [wiki.mixly.org](http://wiki.mixly.org).

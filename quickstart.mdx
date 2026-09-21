@@ -1,47 +1,142 @@
 ---
-title: "Quickstart"
-description: "Begin with a guide on the fastest path to a successful outcome"
+title: "Mixly Quickstart: Upload Your First Program in 5 Minutes"
+sidebarTitle: "Quickstart"
+description: "Drag blocks to build an LED blink program on Arduino AVR, see the generated C++ code update live, then upload to your board using the serial port selector."
 ---
 
-Describe how someone begins using your product. What is the first thing they need to do? Are there any prerequisites?
+This guide walks you from a blank canvas to a running LED blink program on an Arduino AVR board (Uno, Nano, or any compatible AVR board) in five steps. The same workflow applies to every other board in Mixly — only the block categories and generated language differ. You will see exactly what blocks to drag, what the generated Arduino code looks like, and how to send the compiled firmware to your board.
 
-A quickstart should take someone from zero to using your product. They'll get a quick win and a sense of what they can accomplish.
-
-## Prerequisites
-
-Before you begin, you must have:
-
-- Requirement one (for example, Node.js 18+, a free account, an API key)
-- Requirement two (for example, a compatible device, a compatible browser, a compatible operating system)
-
-## Get started
+<Note>
+  The web browser mode requires a **Chromium-based browser** (Google Chrome 89+, Microsoft Edge 89+, or Opera) for WebSerial support. Firefox and Safari do not implement the WebSerial API and cannot upload to Arduino AVR boards. If you are using the Electron desktop app, any of the steps below work without any browser requirement.
+</Note>
 
 <Steps>
-  <Step title="Install">
-    Describe how to install your product or sign up.
 
-    ```bash
-    npm install your-package
-    ```
-  </Step>
-  <Step title="Configure">
-    Describe any setup or configuration needed before first use.
+  <Step title="Open Mixly">
+    Launch Mixly in whichever mode you have set up.
 
-    ```bash
-    your-cli init
-    ```
-  </Step>
-  <Step title="Run it">
-    Show the first thing a user does to see it working.
+    <Tabs>
+      <Tab title="Electron Desktop">
+        Double-click the Mixly desktop shortcut, or run the following command from the project root if you are running from source:
 
-    ```bash
-    your-cli start
-    ```
+        ```bash
+        npm start
+        ```
+
+        The Electron window opens, loads the bundled static assets, and displays the board selection screen. The minimum window size is 700 × 400 pixels.
+      </Tab>
+      <Tab title="Web Browser">
+        Start the local static server (if it is not already running):
+
+        ```bash
+        npm run static
+        ```
+
+        Then navigate to one of the following addresses in a Chromium browser:
+
+        | Protocol | Address | Notes |
+        |---|---|---|
+        | HTTP | `http://127.0.0.1:7000` | Standard; WebSerial works on `localhost` |
+        | HTTPS | `https://127.0.0.1:8000` | Self-signed cert; required for non-localhost WebSerial |
+
+        Accept the self-signed certificate warning if you use the HTTPS address.
+      </Tab>
+    </Tabs>
   </Step>
+
+  <Step title="Select the Arduino AVR board">
+    In the navbar at the top of the IDE, click the **board selector** dropdown. A list of all available board packages appears. Click **Arduino AVR**.
+
+    Mixly loads the Arduino AVR block toolbox on the left — categories include Control, Math, Logic, In/Out, Serial, Actuator, Sensor, Display, and more. The code preview panel on the right switches to C/C++ syntax highlighting.
+
+    <Note>
+      The Arduino AVR board package runs in Electron mode and web-compiler mode. If you are in a plain browser session without a web compiler endpoint configured, direct serial upload will not be available for this board type.
+    </Note>
+  </Step>
+
+  <Step title="Build the LED blink program with blocks">
+    You will construct a program that blinks the built-in LED on pin 13 once per second. This requires two types of blocks:
+
+    **1. Add a "Built-in LED" block from the In/Out category**
+
+    In the left toolbox, expand the **In/Out** category. Drag the **Built-in LED** block onto the workspace and set its state dropdown to **ON** (`HIGH`).
+
+    **2. Add a Delay block from the Control category**
+
+    Expand the **Control** category. Drag a **delay** block and snap it below the Built-in LED block. Set the delay value to `1000` milliseconds.
+
+    **3. Repeat for the OFF state**
+
+    Drag a second **Built-in LED** block and set it to **OFF** (`LOW`), then add another **delay** block set to `1000` ms beneath it.
+
+    Your workspace now contains four blocks running in the main loop:
+
+    ```text
+    [ Built-in LED → ON  ]
+    [ Delay 1000 ms      ]
+    [ Built-in LED → OFF ]
+    [ Delay 1000 ms      ]
+    ```
+
+    As you snap each block into place, the code preview panel on the right updates instantly to show the generated Arduino C++ source:
+
+    ```cpp
+    void setup() {
+      pinMode(13, OUTPUT);
+    }
+
+    void loop() {
+      digitalWrite(13, HIGH);
+      delay(1000);
+      digitalWrite(13, LOW);
+      delay(1000);
+    }
+    ```
+
+    The `inout_buildin_led` generator hardcodes `pinMode(13, OUTPUT)` into the `setup()` function and emits `digitalWrite(13, HIGH)` or `digitalWrite(13, LOW)` in the loop. The `controls_delay` generator produces `delay(ms)` or `delayMicroseconds(µs)` depending on the unit field you select.
+
+    <Tip>
+      Use the **toolbox search** bar at the top of the block panel to find any block by keyword — type "led" or "delay" to jump straight to the relevant blocks without expanding categories manually.
+    </Tip>
+  </Step>
+
+  <Step title="Select a serial port">
+    Plug your Arduino board into a USB port. Mixly detects the new USB device automatically (in Electron mode, `usb-detection` fires a `add` event and triggers a port refresh).
+
+    Click the **serial port selector** in the navbar or status bar. A dropdown lists all detected COM/tty ports. Select the port that corresponds to your Arduino (for example `COM3` on Windows or `/dev/ttyUSB0` on Linux).
+
+    <Tip>
+      If your board does not appear in the list, try unplugging and re-plugging the USB cable. Mixly's USB monitor will fire another port refresh automatically after a 1-second debounce.
+    </Tip>
+  </Step>
+
+  <Step title="Upload to the board">
+    Click the **Upload** button (the arrow icon in the top toolbar). Mixly will:
+
+    1. Compile the generated C++ source using the Arduino CLI bundled with the board package.
+    2. Flash the compiled binary to the selected serial port.
+    3. Print compile and upload progress to the **Output** panel at the bottom of the IDE.
+
+    When the output panel shows a success message, the built-in LED on your board should start blinking — one second on, one second off.
+
+    <Note>
+      If the upload fails with a permission error on Linux, add your user to the `dialout` group:
+      ```bash
+      sudo usermod -aG dialout $USER
+      ```
+      Log out and back in for the change to take effect.
+    </Note>
+  </Step>
+
 </Steps>
 
-<Tip>
-  Give people a way to get help. This could be a link to a support page, a chat with a customer support agent, or a forum for your product.
+## What's next
 
-  Example: Need help? Reach out to us at [support@yourcompany.com](mailto:support@yourcompany.com).
-</Tip>
+<CardGroup cols={2}>
+  <Card title="Installation" icon="download" href="/installation">
+    Set up the Electron desktop app or the local web server from scratch on your operating system.
+  </Card>
+  <Card title="Introduction" icon="book" href="/introduction">
+    Learn about all supported boards, deployment modes, themes, and language options.
+  </Card>
+</CardGroup>

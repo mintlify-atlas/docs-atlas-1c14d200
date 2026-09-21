@@ -1,0 +1,164 @@
+---
+title: "Configuring Mixly via sw-config.json"
+sidebarTitle: "Software Config"
+description: "A field-by-field reference for sw-config.json — the top-level software configuration file that controls board URLs, tool paths, server features, and debug output."
+---
+
+The `sw-config.json` file sits at the root of the Mixly installation and is loaded once during startup by `Config.init()`. Every key you set here becomes part of `Config.SOFTWARE` at runtime and takes precedence over built-in defaults. This makes `sw-config.json` the single authoritative place to tune server-side features, override tool paths for CI environments, or enable diagnostic logging — without touching any source code.
+
+## Default Configuration
+
+The file shipped with Mixly Lite contains the following defaults. All fields are optional; if a key is absent, the runtime falls back to a safe built-in value.
+
+```json sw-config.json
+{
+    "version": "Mixly 3.0 rc0",
+    "board": {
+        "url": "http://download.mixlylibs.cloud/mixly-packages/cloud-boards/boards.json"
+    },
+    "defaultPath": {
+        "win32": {
+            "arduinoCli": "None",
+            "python3": "None"
+        },
+        "darwin": {
+            "arduinoCli": "None",
+            "python3": "None"
+        },
+        "linux": {
+            "arduinoCli": "None",
+            "python3": "None"
+        }
+    },
+    "webSocket": {
+        "enabled": false
+    },
+    "webCompiler": {
+        "enabled": false
+    },
+    "behaviorRecord": {
+        "url": "",
+        "enabled": false
+    },
+    "debug": false
+}
+```
+
+## Field Reference
+
+### `version`
+
+<ParamField path="version" type="string" default="Mixly 3.0 rc0">
+  Human-readable release label. At startup this value is written to `document.title` in the SW (service-worker) layer so the browser tab or Electron window title reflects the running build. Set this to a custom string when deploying a branded or internally patched release.
+</ParamField>
+
+---
+
+### `board`
+
+<ParamField path="board.url" type="string" default="http://download.mixlylibs.cloud/mixly-packages/cloud-boards/boards.json">
+  Full URL of the remote JSON manifest listing cloud-available board packages. The Board Manager dialog fetches this URL to discover installable boards and version updates. Set it to an internal mirror if the host network does not have internet access, or to a local `file://` path during development.
+</ParamField>
+
+---
+
+### `defaultPath`
+
+Platform-specific overrides for the tool binaries that Mixly invokes when compiling or uploading. The key names mirror Node's `process.platform` values (`win32`, `darwin`, `linux`). Each platform object accepts two sub-keys:
+
+<ParamField path="defaultPath.win32.arduinoCli" type="string" default='"None"'>
+  Absolute path to the `arduino-cli` executable on Windows. When set to `"None"` Mixly resolves the bundled binary from the board package directory. Override this if you want to use a system-installed `arduino-cli`.
+
+  **Example:** `"C:\\tools\\arduino-cli\\arduino-cli.exe"`
+</ParamField>
+
+<ParamField path="defaultPath.win32.python3" type="string" default='"None"'>
+  Absolute path to the `python3` executable on Windows. Used for MicroPython and Python board upload/run flows. Set to `"None"` to use the Python bundled inside the board package.
+
+  **Example:** `"C:\\Python311\\python.exe"`
+</ParamField>
+
+<ParamField path="defaultPath.darwin.arduinoCli" type="string" default='"None"'>
+  Absolute path to `arduino-cli` on macOS. Accepts a standard POSIX path. Override when the bundled binary is incompatible with the host macOS version or processor architecture.
+</ParamField>
+
+<ParamField path="defaultPath.darwin.python3" type="string" default='"None"'>
+  Absolute path to `python3` on macOS. Homebrew users can point this to `/opt/homebrew/bin/python3`.
+</ParamField>
+
+<ParamField path="defaultPath.linux.arduinoCli" type="string" default='"None"'>
+  Absolute path to `arduino-cli` on Linux. Useful in headless CI pipelines where the binary lives at a known system path.
+</ParamField>
+
+<ParamField path="defaultPath.linux.python3" type="string" default='"None"'>
+  Absolute path to `python3` on Linux. Typically `/usr/bin/python3` when overriding the bundled copy.
+</ParamField>
+
+---
+
+### `webSocket`
+
+<ParamField path="webSocket.enabled" type="boolean" default="false">
+  Enables the optional WebSocket back-end server that lets the browser-based Mixly front-end communicate with a local hardware agent for serial upload and compilation. When `true`, `Env.hasSocketServer` is set to `true` and the loader initialises the socket client. Leave `false` for pure Electron deployments or when using WebSerial exclusively.
+</ParamField>
+
+---
+
+### `webCompiler`
+
+<ParamField path="webCompiler.enabled" type="boolean" default="false">
+  Enables a remote or locally hosted compiler service reachable from the web front-end. When `true`, `Env.hasCompiler` is set to `true` and boards that list `"webCompiler": true` in `boards.json` can be compiled in-browser without the Electron shell. Requires a matching compiler endpoint to be running; see the server deployment guide for setup details.
+</ParamField>
+
+---
+
+### `behaviorRecord`
+
+<ParamField path="behaviorRecord.url" type="string" default='""'>
+  Endpoint URL that receives anonymised usage events via HTTP POST. The payload is built by `UserEvents` and sent only when `behaviorRecord.enabled` is `true`. Useful for collecting aggregate telemetry on a self-hosted analytics service. Leave empty to disable reporting entirely.
+</ParamField>
+
+<ParamField path="behaviorRecord.enabled" type="boolean" default="false">
+  Master switch for usage event recording. When `false` no POST requests are made, regardless of whether `url` is set.
+</ParamField>
+
+---
+
+### `debug`
+
+<ParamField path="debug" type="boolean" default="false">
+  Global debug flag. When `true`:
+  - The `Mixly.Debug` wrapper passes calls through to native `console` methods (enabling full log levels such as `warn`, `error`, and `table` in addition to `log`).
+  - The Electron IPC event handler logs every received message to the console (`console.log('receive -> ', message)`).
+  - The WebSocket client logs all socket traffic.
+
+  Keep this `false` in production to suppress verbose output.
+</ParamField>
+
+---
+
+## Runtime Access
+
+After startup all values are accessible via `Mixly.Config.SOFTWARE`:
+
+```javascript
+const { Config } = Mixly;
+
+// Check if the WebSocket server is active
+if (Config.SOFTWARE?.webSocket?.enabled) {
+    console.log('Socket server is enabled');
+}
+
+// Read the current version string
+console.log(Config.SOFTWARE.version); // "Mixly 3.0 rc0"
+```
+
+<Note>
+  `Config.SOFTWARE` is populated once during `Config.init()` and is not reactively updated. If you modify `sw-config.json` while the application is running you must reload the page (web mode) or restart the Electron window for changes to take effect.
+</Note>
+
+## Environment Variables vs. sw-config.json
+
+<Tip>
+  For automated deployments, prefer setting `defaultPath` overrides in `sw-config.json` rather than relying on `PATH` manipulation. Mixly reads the file synchronously before any build or upload command is dispatched, so the paths are guaranteed to be resolved correctly even in sandboxed Electron environments where `PATH` may differ from a terminal session.
+</Tip>

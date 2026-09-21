@@ -1,0 +1,123 @@
+{
+  "projectType": "saas",
+  "projectName": "Mixly",
+  "projectDescription": "Mixly is a web-based and desktop graphical programming IDE for beginners and hardware enthusiasts, built on Blockly and supporting Arduino, MicroPython, and Python boards.",
+  "theme": "palm",
+  "primaryColor": "#3DAB6A",
+  "lightColor": "#E8F7EF",
+  "darkColor": "#1A7A45",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "installation"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/workspace",
+              "concepts/boards",
+              "concepts/editors",
+              "concepts/file-management"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/arduino",
+              "guides/micropython",
+              "guides/python",
+              "guides/serial-monitor",
+              "guides/library-management"
+            ]
+          },
+          {
+            "group": "Configuration",
+            "pages": [
+              "configuration/sw-config",
+              "configuration/board-config",
+              "configuration/themes-language"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Developer Reference",
+        "groups": [
+          {
+            "group": "Architecture",
+            "pages": [
+              "reference/architecture",
+              "reference/module-system"
+            ]
+          },
+          {
+            "group": "Board Development",
+            "pages": [
+              "reference/custom-boards",
+              "reference/block-definitions",
+              "reference/code-generators"
+            ]
+          },
+          {
+            "group": "Build & Deploy",
+            "pages": [
+              "reference/build-scripts",
+              "reference/static-server"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Drag-and-drop Blockly workspace for visual programming",
+    "Multi-mode editor supporting Block, Mix (split), and Code views",
+    "Support for Arduino (AVR, ESP32, ESP8266), MicroPython (ESP32, K210, micro:bit), and Python boards",
+    "Integrated serial monitor with real-time chart plotting",
+    "Library manager for importing and managing third-party Mixly, Arduino, and Python libraries",
+    "Board manager for adding and removing hardware board packages",
+    "Light and dark theme with system-follow option",
+    "Multi-language support (English, Simplified Chinese, Traditional Chinese)",
+    "Web (browser) and Electron (desktop) deployment modes",
+    "WebSerial and WebUSB support for in-browser firmware flashing",
+    "Toolbox search and workspace find across block categories",
+    "Tabbed file management with .mix file save/open"
+  ],
+  "publicApiSurface": [
+    "Mixly.App",
+    "Mixly.Boards",
+    "Mixly.Config",
+    "Mixly.Env",
+    "Mixly.Msg",
+    "Mixly.Nav",
+    "Mixly.Workspace",
+    "Mixly.EditorMix",
+    "Mixly.EditorBlockly",
+    "Mixly.EditorCode",
+    "Mixly.FooterBar",
+    "Mixly.Serial",
+    "Mixly.Web.Serial",
+    "Mixly.Electron.Serial",
+    "Mixly.Electron.LibManager",
+    "Mixly.Electron.BU (burn/upload)",
+    "Mixly.Web.BU (burn/upload)",
+    "Mixly.BoardManager",
+    "Mixly.Theme",
+    "Mixly.XML",
+    "Mixly.HTMLTemplate",
+    "npm run static",
+    "npm run build:boards:all",
+    "npm run build:boards:arduino",
+    "npm run build:boards:micropython",
+    "npm run build:boards:python",
+    "npm run build:examples"
+  ]
+}

@@ -1,0 +1,247 @@
+---
+title: "Mixly Built-in Static Web Server for Browser Mode"
+sidebarTitle: "Static Server"
+description: "How Mixly's Express-based static server works, its HTTP and HTTPS ports, SSL certificate setup, and everything needed to run the IDE in a Chromium browser."
+---
+
+Mixly ships a small Express-based static file server that makes the IDE accessible in a web browser without a separate hosting solution. The server is intentionally minimal — it serves the entire repository root as a static tree over both plain HTTP and HTTPS simultaneously. HTTPS is required when you want to use hardware features in the browser, because the WebSerial API (the mechanism Mixly uses to talk to connected boards) is only available in secure contexts.
+
+## Architecture
+
+The server is split across three files in the `static-server/` directory:
+
+| File | Role |
+|---|---|
+| `static-server/server.js` | Entry point — creates and starts both servers |
+| `static-server/static-server.js` | HTTP server module (Express + `http`) |
+| `static-server/static-sslserver.js` | HTTPS server module (Express + `https` + TLS) |
+
+Both server modules expose a single `.run(port)` method. `server.js` calls them in sequence at startup:
+
+```js
+// static-server/server.js
+const StaticServer    = require('./static-server.js');
+const SSLStaticServer = require('./static-sslserver.js');
+
+const init = () => {
+    StaticServer.run('7000');
+    SSLStaticServer.run('8000');
+}
+
+if (!module.parent) {
+    init();
+} else {
+    module.exports = init;
+}
+```
+
+<Note>
+  When `server.js` is `require()`'d by another module (e.g., from the Electron main process), it exports the `init` function rather than calling it immediately. This lets the Electron app start the server programmatically at the right point in its lifecycle.
+</Note>
+
+---
+
+## Ports
+
+| Protocol | Port | URL |
+|---|---|---|
+| HTTP | 7000 | `http://127.0.0.1:7000` |
+| HTTPS | 8000 | `https://127.0.0.1:8000` |
+
+Both servers serve the same content — the repository root — using Express's built-in `express.static` middleware. There is no redirect from HTTP to HTTPS; both are available at all times once the server is running.
+
+---
+
+## HTTP server
+
+```js
+// static-server/static-server.js
+const http    = require('http');
+const express = require('express');
+const path    = require('path');
+
+StaticServer.run = (port) => {
+    const app = express();
+    app.use(express.static(path.resolve(__dirname, '../')));
+    const httpServer = http.createServer(app);
+    httpServer.listen(port);
+    console.log('Static服务器正在运行 [端口 - ' + port + ', http]...');
+    console.log('访问地址：http://127.0.0.1:' + port);
+    StaticServer.server   = httpServer;
+    StaticServer.app      = app;
+    StaticServer.port     = port;
+    StaticServer.protocol = 'http';
+}
+```
+
+The document root is `path.resolve(__dirname, '../')` — one level above `static-server/`, i.e. the repository root. Express's default static middleware handles `index.html` resolution, `ETag` caching, and MIME types automatically.
+
+---
+
+## HTTPS server and SSL certificates
+
+```js
+// static-server/static-sslserver.js
+const https = require('https');
+const fs    = require('fs');
+
+SSLStaticServer.run = (port) => {
+    const KEY_PATH = path.resolve(__dirname, './certs/server.key');
+    const CRT_PATH = path.resolve(__dirname, './certs/server.crt');
+    const options = {
+        key:  fs.readFileSync(KEY_PATH),
+        cert: fs.readFileSync(CRT_PATH)
+    };
+    const app = express();
+    app.use(express.static(path.resolve(__dirname, '../')));
+    const httpsServer = https.createServer(options, app);
+    httpsServer.listen(port);
+    console.log('Static服务器正在运行 [端口 - ' + port + ', https]...');
+    console.log('访问地址：https://127.0.0.1:' + port);
+    // ...
+}
+```
+
+### Certificate files
+
+The server reads its TLS credentials from:
+
+```
+static-server/certs/server.key   ← private key
+static-server/certs/server.crt   ← certificate
+static-server/certs/server.csr   ← certificate signing request (not used at runtime)
+```
+
+The repository includes pre-generated self-signed certificates so the server starts without any additional setup. Because they are self-signed, browsers will show a security warning on first visit.
+
+<Warning>
+  Self-signed certificates trigger browser security warnings. You must click through the "Your connection is not private" warning (or add a browser exception) before the IDE will load over HTTPS. Do **not** replace the bundled certificates with a CA-signed certificate unless you are deploying Mixly on a public server — the self-signed cert is intentional for local development use.
+</Warning>
+
+---
+
+## Starting the server
+
+<Steps>
+  <Step title="Install dependencies">
+    From the repository root, install the Node.js dependencies. Express is listed as a `devDependency` in `package.json`.
+
+    ```bash
+    npm install
+    ```
+  </Step>
+
+  <Step title="Start the static server">
+    Run the server directly, or use the combined startup shortcut that also regenerates dependency graphs first:
+
+    ```bash
+    # Static server only
+    npm run static
+
+    # Regenerate deps.json files, then start the server
+    npm start
+    ```
+
+    You should see output like:
+
+    ```
+    Static服务器正在运行 [端口 - 7000, http]...
+    访问地址：http://127.0.0.1:7000
+    Static服务器正在运行 [端口 - 8000, https]...
+    访问地址：https://127.0.0.1:8000
+    ```
+  </Step>
+
+  <Step title="Open Mixly in the browser">
+    Navigate to the HTTPS URL to access the full-featured web mode with WebSerial support:
+
+    ```
+    https://127.0.0.1:8000
+    ```
+
+    On the first visit your browser will display a certificate warning. Accept the risk / proceed to load the IDE.
+  </Step>
+
+  <Step title="Approve the self-signed certificate">
+    In Chrome or Edge, click **Advanced** → **Proceed to 127.0.0.1 (unsafe)**. In Firefox, click **Advanced** → **Accept the Risk and Continue**. This step is required only once per browser profile.
+  </Step>
+</Steps>
+
+---
+
+## WebSerial and the HTTPS requirement
+
+<Note>
+  The [WebSerial API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Serial_API) — which Mixly uses to upload code and communicate with connected boards in browser mode — is restricted to **secure contexts** (HTTPS or `localhost`). If you open the IDE over plain HTTP on port 7000, the serial port selector will not appear and board communication will be unavailable.
+</Note>
+
+Always use `https://127.0.0.1:8000` when you need hardware interaction in browser mode.
+
+---
+
+## Browser requirements
+
+<CardGroup cols={2}>
+  <Card title="Supported: Chromium browsers" icon="chrome">
+    Google Chrome 89+, Microsoft Edge 89+, and other Chromium-based browsers support WebSerial. These are the only browsers where hardware features work.
+  </Card>
+  <Card title="Not supported: Firefox & Safari" icon="ban">
+    Firefox and Safari do not implement the WebSerial API. The IDE may load but serial port access — and therefore board upload and communication — will be unavailable.
+  </Card>
+</CardGroup>
+
+---
+
+## Web mode vs. Electron mode
+
+The same IDE codebase runs in both Electron (desktop) and browser environments. The static server enables browser mode.
+
+| Feature | Browser mode (static server) | Electron mode (desktop app) |
+|---|---|---|
+| Hardware access | WebSerial API (Chromium only) | Node.js `serialport` module (full access) |
+| File system access | Browser download/upload dialogs | Native OS file dialogs via Node.js `fs` |
+| Node.js APIs | Not available | Full Node.js environment |
+| HTTPS required | Yes (for WebSerial) | Not applicable |
+| Startup | `npm run static` → browser | `npm start` in Electron context |
+| Platform | Any OS with a Chromium browser | Windows, macOS, Linux (Electron targets) |
+
+<Tip>
+  Browser mode is ideal for sharing Mixly in a classroom or lab setting — students can open the IDE from a local network address without installing anything. Run the server on a machine that is accessible on the LAN, note its IP address, and have students navigate to `https://<host-ip>:8000`. Each student's browser must individually accept the self-signed certificate warning.
+</Tip>
+
+---
+
+## CORS and origin handling
+
+The static server does not configure any explicit CORS headers. Express's `express.static` middleware only serves files; it does not add `Access-Control-Allow-Origin` or similar headers. All requests are served from the same origin (`127.0.0.1:7000` or `127.0.0.1:8000`), so same-origin policy is not a concern for the IDE's own assets.
+
+If you embed Mixly inside an iframe from a different origin, or if you modify the server to expose an API, you will need to add CORS middleware manually:
+
+```js
+// Example: adding permissive CORS to static-server.js
+const cors = require('cors');
+app.use(cors());
+app.use(express.static(path.resolve(__dirname, '../')));
+```
+
+---
+
+## Programmatic usage
+
+Because `server.js` exports its `init` function when loaded as a module, you can start the static server from your own Node.js code:
+
+```js
+const startStaticServer = require('./static-server/server.js');
+// Starts HTTP on 7000 and HTTPS on 8000
+startStaticServer();
+```
+
+You can also use the individual modules to start only one protocol or on a different port:
+
+```js
+const StaticServer    = require('./static-server/static-server.js');
+const SSLStaticServer = require('./static-server/static-sslserver.js');
+
+StaticServer.run('3000');       // HTTP only, port 3000
+SSLStaticServer.run('3443');    // HTTPS only, port 3443
+```

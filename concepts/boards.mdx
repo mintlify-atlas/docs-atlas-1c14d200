@@ -1,0 +1,157 @@
+---
+title: "Mixly Board System: Types, Languages, and Environments"
+sidebarTitle: "Boards"
+description: "How boards.json defines each target platform, what the electron/web/webCompiler/webSocket environment flags mean, and how the board selector drives toolbox filtering."
+---
+
+Every board in Mixly is described by a single JSON entry in `boards.json`. That entry tells the IDE which toolbox XML to load, which programming language to use, what the board looks like, and which deployment environments are supported. The `Mixly.Boards` module reads this configuration at startup, populates the board selector dropdown, and re-configures the toolbox and generator every time the user switches boards.
+
+## boards.json Structure
+
+Each board entry has the following fields:
+
+| Field | Type | Purpose |
+|---|---|---|
+| `boardType` | `string` | Human-readable board name shown in the dropdown |
+| `boardImg` | `string` | Relative path to the board image (used on the home screen) |
+| `boardIndex` | `string` | Relative path to the board's toolbox `index.xml` |
+| `env` | `object` | Four boolean flags controlling environment availability |
+| `language` | `string` | Programming language (`MicroPython`, `Python`, `C/C++`) |
+
+### Environment Flags
+
+The `env` object on every board entry controls where a board can be used:
+
+<CardGroup cols={2}>
+  <Card title="electron" icon="desktop">
+    `true` — the board is available in the Electron desktop application. All boards currently ship with this enabled.
+  </Card>
+  <Card title="web" icon="globe">
+    `true` — the board is available in the browser (Chromium + WebSerial). Boards requiring native toolchains (Arduino AVR, ESP8266, ESP32, Python 3) have this set to `false`.
+  </Card>
+  <Card title="webCompiler" icon="cloud">
+    `true` — the board can compile or upload via a remote web compiler service. Most boards support this.
+  </Card>
+  <Card title="webSocket" icon="plug">
+    `true` — the board can communicate with the IDE via a WebSocket backend server. Most boards support this.
+  </Card>
+</CardGroup>
+
+<Note>
+A board with `"web": false` will not appear in the board selector when Mixly is running in browser mode — it requires the Electron desktop app or a WebSocket server to compile and upload code.
+</Note>
+
+---
+
+## Available Boards
+
+The following boards are defined in `boards.json`:
+
+<Accordion title="MicroPython Boards">
+
+| Board | `boardType` | Language | electron | web | webCompiler | webSocket |
+|---|---|---|:---:|:---:|:---:|:---:|
+| MixGo CE | `MixGo CE` | MicroPython | ✓ | ✓ | ✓ | ✓ |
+| Python ESP32-S3 | `Python ESP32-S3` | MicroPython | ✓ | ✓ | ✓ | ✓ |
+| Python ESP32-C3 | `Python ESP32-C3` | MicroPython | ✓ | ✓ | ✓ | ✓ |
+| Python Robot | `Python Robot` | MicroPython | ✓ | ✓ | ✓ | ✓ |
+| Python ESP32 | `Python ESP32` | MicroPython | ✓ | ✓ | ✓ | ✓ |
+| Python ESP32-C2 | `Python ESP32-C2` | MicroPython | ✓ | ✓ | ✓ | ✓ |
+| MixGo AI | `MixGo AI` | MicroPython | ✓ | ✓ | ✓ | ✓ |
+
+All MicroPython boards use the `micropython_*` board packages under `boards/default/`. Code is uploaded via `ampy` or `esptool` (Electron) or via a WebSocket connection to the device.
+
+</Accordion>
+
+<Accordion title="Arduino (C/C++) Boards">
+
+| Board | `boardType` | Language | electron | web | webCompiler | webSocket |
+|---|---|---|:---:|:---:|:---:|:---:|
+| Arduino AVR | `Arduino AVR` | C/C++ | ✓ | ✗ | ✓ | ✓ |
+| Arduino ESP8266 | `Arduino ESP8266` | C/C++ | ✓ | ✗ | ✓ | ✓ |
+| Arduino ESP32 | `Arduino ESP32` | C/C++ | ✓ | ✗ | ✓ | ✓ |
+
+Arduino boards require a local `arduino-cli` binary for compiling and uploading, which is only available in the Electron app. They are therefore not available in pure browser mode (`"web": false`).
+
+</Accordion>
+
+<Accordion title="Python 3 Boards">
+
+| Board | `boardType` | Language | electron | web | webCompiler | webSocket |
+|---|---|---|:---:|:---:|:---:|:---:|
+| Python 3 | `Python 3` | Python | ✓ | ✗ | ✗ | ✗ |
+| Python 3 Lite | `Python 3 Lite` | Python | ✓ | ✓ | ✓ | ✓ |
+
+**Python 3** runs scripts locally via the bundled Python runtime — Electron only, no web compiler or socket server support.  
+**Python 3 Lite** runs code in the browser using the Skulpt Python interpreter — fully web-compatible.
+
+</Accordion>
+
+---
+
+## How the Board Selector Works
+
+`Boards.init()` is called once during `FooterBar` construction. It reads the active board's configuration from `Config.BOARD`, builds a `BoardConfigItem` for every named sub-board, populates the Select2 `<select>` element in the Nav, and registers a `changeBoard` listener.
+
+```js
+// Simplified flow inside Boards.init()
+for (let name of Object.keys(Boards.dict)) {
+    const option = new Option(name, Boards.dict[name].key);
+    $boardSelector.append(option);
+}
+Nav.getMain().bind('changeBoard', (data) => {
+    Boards.changeTo(data.text);
+    Boards.updateCategories(data.text);
+});
+```
+
+When the user selects a new board:
+
+<Steps>
+  <Step title="Boards.changeTo(boardName)">
+    Updates `Config.SELECTED_BOARD` with the new board's burn, upload, and serial configuration. Resolves template strings like `{srcPath}` and `{indexPath}` into absolute paths. Calls `EditorBlockly.reloadWorkspace()` to preserve the current workspace state across the toolbox reload.
+  </Step>
+  <Step title="Boards.updateCategories(boardName)">
+    Reads the board's toolbox XML (from `XML.CATEGORIES_STR[boardName]`), applies `m-show`/`m-hide` filtering for the board key, appends any third-party library categories (Electron only), appends the hidden `catSearch` category, and calls `EditorBlockly.updateToolbox()` to inject the new XML into the live Blockly instance.
+  </Step>
+  <Step title="Footer update">
+    `#mixly-footer-boardname` is updated to show the new board name. If the board defines a `Profile`, `Profile['default']` is updated too.
+  </Step>
+</Steps>
+
+---
+
+## Toolbox Filtering with `m-show` / `m-hide`
+
+Board-specific toolbox XML can include `m-show` and `m-hide` attributes on `<category>` and `<block>` elements. `Boards.removeBlocks()` evaluates these against the active board's key to hide irrelevant blocks without needing separate XML files for every sub-variant.
+
+```xml
+<!-- Show this category only for ESP32-S3 boards -->
+<category name="Camera" m-show="micropython:esp32s3">
+  ...
+</category>
+
+<!-- Hide this block on C2 variant -->
+<block type="wifi_connect" m-hide="micropython:esp32c2"></block>
+```
+
+The key format is `platform:variant:subvariant` (up to three colon-separated segments). A comma inside the third segment means "any of these sub-variants".
+
+---
+
+## Board Configuration Panel
+
+Clicking the board name in the footer bar opens the **Board Config** panel (`FooterLayerBoardConfig`). This panel lists all sub-boards within the current board package and their configurable options (e.g. CPU frequency, flash mode, partition scheme for Arduino ESP32). The selected options are serialised into the `.mix` file as a `<config>` block so the project always opens with the correct board settings.
+
+```xml
+<!-- Inside a saved .mix file -->
+<xml version="Mixly 2.0" board="arduino_esp32@Arduino ESP32">
+  <block type="setup" ...></block>
+</xml>
+<config>{"board":"esp32:esp32:esp32","cpu_freq":"240"}</config>
+<code>...base64 encoded code...</code>
+```
+
+<Tip>
+Use `Boards.getSelectedBoardConfig()` in custom board scripts to read back the current board configuration as a plain JavaScript object.
+</Tip>

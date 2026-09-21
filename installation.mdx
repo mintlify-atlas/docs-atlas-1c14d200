@@ -1,0 +1,185 @@
+---
+title: "Install Mixly 3.0 on Windows, macOS, and Linux"
+sidebarTitle: "Installation"
+description: "Download the one-click Electron updater for your platform, or run the Express static server and open Mixly in a Chromium browser with WebSerial enabled."
+---
+
+Mixly 3.0 can be installed in two ways. The **Electron desktop app** bundles everything — Node.js runtime, Arduino CLI, and Python toolchain — into a single package you download and run. The **web server** mode lets you serve the IDE as a local website and open it in a Chromium browser, which is useful for machines where you cannot install desktop software or when you want to access Mixly from another device on the same network.
+
+<Tabs>
+  <Tab title="Desktop (Electron)">
+
+    The Electron desktop app is distributed as platform-specific one-click update packages. Each archive contains a launcher that downloads the latest Mixly source and dependencies, then starts the Electron process for you.
+
+    ## System requirements
+
+    | Requirement | Details |
+    |---|---|
+    | Operating system | Windows 7+ (32-bit or 64-bit), macOS (Intel or Apple Silicon), Linux (x64 or ARM64) |
+    | Disk space | ~500 MB after first launch (board packages downloaded on demand) |
+    | USB driver | CP2102 / CH340 driver for your board's USB-to-serial chip |
+
+    ## Download the one-click updater
+
+    Choose the package that matches your platform:
+
+    | Platform | Architecture | Download |
+    |---|---|---|
+    | Windows | 64-bit (x64) | [mixly3.0-win32-x64 一键更新版.7z](http://mixlylibs.cloud:8099/mixly3/update-tools/media/branch/master/mixly3.0-win32-x64%E4%B8%80%E9%94%AE%E6%9B%B4%E6%96%B0%E7%89%88.7z) |
+    | Windows | 32-bit (ia32) | [mixly3.0-win32-ia32 一键更新版.7z](http://mixlylibs.cloud:8099/mixly3/update-tools/media/branch/master/mixly3.0-win32-ia32%E4%B8%80%E9%94%AE%E6%9B%B4%E6%96%B0%E7%89%88.7z) |
+    | macOS | Intel (x64) | [mixly3.0-mac-x64 一键更新版.7z](http://mixlylibs.cloud:8099/mixly3/update-tools/media/branch/master/mixly3.0-mac-x64%E4%B8%80%E9%94%AE%E6%9B%B4%E6%96%B0%E7%89%88.7z) |
+    | macOS | Apple Silicon (arm64) | [mixly3.0-mac-arm64 一键更新版.7z](http://mixlylibs.cloud:8099/mixly3/update-tools/media/branch/master/mixly3.0-mac-arm64%E4%B8%80%E9%94%AE%E6%9B%B4%E6%96%B0%E7%89%88.7z) |
+    | Linux | 64-bit (x64) | [Mixly3.0-linux-x64 一键更新版.zip](http://mixlylibs.cloud:8099/mixly3/update-tools/media/branch/master/Mixly3.0-linux-x64%E4%B8%80%E9%94%AE%E6%9B%B4%E6%96%B0%E7%89%88.zip) |
+    | Linux | ARM 64-bit (arm64) | [Mixly3.0-linux-arm64 一键更新版.zip](http://mixlylibs.cloud:8099/mixly3/update-tools/media/branch/master/Mixly3.0-linux-arm64%E4%B8%80%E9%94%AE%E6%9B%B4%E6%96%B0%E7%89%88.zip) |
+
+    <Note>
+      Alternative downloads are also available from [Baidu Netdisk](https://pan.baidu.com/s/1BotIhmA6EGWVout-MoxBLg?pwd=ny1n) and [123 Netdisk](https://www.123pan.com/s/uAxvTd-xdX9d.html) if the direct links above are slow to reach from your region.
+    </Note>
+
+    ## Run the updater
+
+    <Steps>
+      <Step title="Extract the archive">
+        Extract the downloaded `.7z` or `.zip` file to a folder of your choice. Avoid paths with spaces or non-ASCII characters — some toolchain components do not handle them well.
+
+        On Windows you can use [7-Zip](https://www.7-zip.org/) to extract `.7z` archives. On macOS and Linux the built-in `unzip` or `7z` command handles both formats.
+      </Step>
+
+      <Step title="Run the one-click updater">
+        Inside the extracted folder, double-click the updater executable (`.exe` on Windows, the shell script on macOS/Linux). The updater pulls the latest source code and board packages from the Mixly cloud, then launches the Electron app automatically.
+
+        On **macOS**, if the app is blocked by Gatekeeper, right-click the executable and choose **Open**, then confirm in the dialog.
+
+        On **Linux**, you may need to make the launcher executable first:
+
+        ```bash
+        chmod +x ./Mixly-linux-x64.sh
+        ./Mixly-linux-x64.sh
+        ```
+      </Step>
+
+      <Step title="Verify the app opens">
+        The Electron window should appear showing the Mixly board selection screen. The window requires a minimum size of 700 × 400 pixels. On macOS the native menu bar is retained; on Windows and Linux it is hidden to save space.
+      </Step>
+    </Steps>
+
+    ## Running from source with npm
+
+    If you have cloned the repository and want to start the Electron app directly from source, use:
+
+    <CodeGroup>
+      ```bash Start Electron app
+      npm start
+      ```
+
+      ```bash What npm start does
+      # npm start runs: npm run test
+      # npm run test runs: npm run deps && npm run static
+      #   npm run deps  → node scripts/deps-gen.js   (generates module dependency files)
+      #   npm run static → node ./static-server/server.js  (starts the Express static server)
+      # After those complete, Electron loads ./src/index.html
+      ```
+    </CodeGroup>
+
+    <Warning>
+      `npm start` runs `npm run deps` (dependency file generation) and `npm run static` (the Express server) **before** Electron launches. Both must succeed or the renderer process will fail to load assets. Ensure Node.js is installed and `npm install` has been run at least once before calling `npm start`.
+    </Warning>
+
+  </Tab>
+  <Tab title="Web Server">
+
+    The web server mode serves Mixly's static assets over HTTP and HTTPS using a small Express server. Any machine on the same network can open the IDE in a browser — no Electron, no installer.
+
+    ## System requirements
+
+    | Requirement | Details |
+    |---|---|
+    | Node.js | 16 or later (required to run the Express static server) |
+    | Browser | Chrome 89+, Edge 89+, or any Chromium-based browser with WebSerial API support |
+    | OS | Windows, macOS, or Linux (any platform that runs Node.js) |
+
+    <Warning>
+      **Firefox and Safari do not support the WebSerial API.** You must use a Chromium-based browser to upload firmware or communicate over serial. Python 3 Lite (Skulpt) and other web-compiler-only boards will still work in any browser, but serial-dependent features will not.
+    </Warning>
+
+    ## Install and start the server
+
+    <Steps>
+      <Step title="Install Node.js dependencies">
+        From the root of the Mixly source directory, install the required Node.js packages:
+
+        <CodeGroup>
+          ```bash npm
+          npm install
+          ```
+        </CodeGroup>
+
+        This installs the `express` package (and other dev dependencies) listed in `package.json`.
+      </Step>
+
+      <Step title="Start the static server">
+        <CodeGroup>
+          ```bash Start the static server
+          npm run static
+          ```
+        </CodeGroup>
+
+        The command runs `node ./static-server/server.js`, which starts two servers in parallel:
+
+        | Server | Port | Protocol | Notes |
+        |---|---|---|---|
+        | HTTP | `7000` | `http://` | Standard plaintext; WebSerial works on `localhost` |
+        | HTTPS | `8000` | `https://` | Self-signed TLS cert bundled in `static-server/certs/`; required for WebSerial on non-localhost addresses |
+
+        You should see console output similar to:
+
+        ```text
+        Static服务器正在运行 [端口 - 7000, http]...
+        访问地址：http://127.0.0.1:7000
+        Static服务器正在运行 [端口 - 8000, https]...
+        访问地址：https://127.0.0.1:8000
+        ```
+      </Step>
+
+      <Step title="Open Mixly in a Chromium browser">
+        Navigate to one of the following addresses:
+
+        - **`http://127.0.0.1:7000`** — recommended for local use; WebSerial is allowed on `localhost` over plain HTTP.
+        - **`https://127.0.0.1:8000`** — use this if you need HTTPS (for example, when accessing from another device on the network). Accept the browser's self-signed certificate warning on first visit.
+
+        The Mixly board selection interface loads in the browser tab. Select a board that has `"web": true` in `boards.json` (for example, MixGo CE, Python ESP32-S3, or Python 3 Lite).
+
+        <Note>
+          Boards marked `"web": false` in `boards.json` — including Arduino AVR, Arduino ESP8266, and Arduino ESP32 — are not available for direct serial upload in the browser. They can still be used if a web compiler endpoint is configured (`webCompiler: true` in `sw-config.json`).
+        </Note>
+      </Step>
+    </Steps>
+
+    ## Keeping the server running
+
+    The static server process runs in the foreground. To keep it alive in the background you can use a process manager:
+
+    <CodeGroup>
+      ```bash pm2
+      npm install -g pm2
+      pm2 start "npm run static" --name mixly-server
+      ```
+
+      ```bash nohup (Linux / macOS)
+      nohup npm run static &
+      ```
+    </CodeGroup>
+
+  </Tab>
+</Tabs>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="bolt" href="/quickstart">
+    Build and upload your first LED blink program using the block editor.
+  </Card>
+  <Card title="Introduction" icon="book" href="/introduction">
+    See all supported boards, deployment modes, theme options, and language settings.
+  </Card>
+</CardGroup>
